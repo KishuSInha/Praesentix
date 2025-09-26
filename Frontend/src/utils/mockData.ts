@@ -24,12 +24,12 @@ export interface School {
   id: string;
   name: string;
   location: string;
-  totalStudents: number;
-  totalTeachers: number;
-  currentStudents: number;
-  dropoutRate: number;
-  attendanceRate: number;
-  lastUpdated: string;
+  totalStudents?: number;
+  totalTeachers?: number;
+  currentStudents?: number;
+  dropoutRate?: number;
+  attendanceRate?: number;
+  lastUpdated?: string;
 }
 
 
@@ -188,7 +188,7 @@ export const mockSchools: School[] = [
 export const API_CONFIG = {
   // Set to false to use real API instead of mock data
   USE_MOCK: false,
-  BASE_URL: "http://127.0.0.1:5000/api",
+  BASE_URL: "http://127.0.0.1:5001/api",
   // Add CORS headers to allow requests from port 8080
   headers: {
     'Content-Type': 'application/json',

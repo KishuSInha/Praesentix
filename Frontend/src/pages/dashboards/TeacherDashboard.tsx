@@ -109,8 +109,8 @@ const TeacherDashboard = () => {
                 <BookOpen className="w-5 sm:w-6 lg:w-8 h-5 sm:h-6 lg:h-8 text-teacher" />
                 <span className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground">{stats?.totalClasses}</span>
               </div>
-              <h3 className="font-semibold text-foreground text-xs sm:text-sm lg:text-base">{t('total_classes')}</h3>
-              <p className="text-xs text-muted-foreground">{t('active_classes')}</p>
+              <h3 className="font-semibold text-foreground text-xs sm:text-sm lg:text-base">{t('Total Classes')}</h3>
+              <p className="text-xs text-muted-foreground">{t('Active Classes')}</p>
             </div>
 
             <div className="bg-card rounded-xl p-4 border border-border shadow-sm">
@@ -118,8 +118,8 @@ const TeacherDashboard = () => {
                 <Users className="w-5 sm:w-6 lg:w-8 h-5 sm:h-6 lg:h-8 text-primary" />
                 <span className="text-lg sm:text-xl lg:text-2xl font-bold text-foreground">{stats?.studentsTotal}</span>
               </div>
-              <h3 className="font-semibold text-foreground text-xs sm:text-sm lg:text-base">{t('total_students')}</h3>
-              <p className="text-xs text-muted-foreground">{t('across_all_classes')}</p>
+              <h3 className="font-semibold text-foreground text-xs sm:text-sm lg:text-base">{t('Total Students')}</h3>
+              <p className="text-xs text-muted-foreground">{t('Across all Classes')}</p>
             </div>
 
             <div className="bg-card rounded-xl p-4 border border-border shadow-sm">
@@ -144,7 +144,7 @@ const TeacherDashboard = () => {
           {/* Quick Actions */}
           <div className="bg-card rounded-xl p-4 sm:p-6 border border-border shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base sm:text-lg font-semibold">{t('quick_actions_title')}</h3>
+              <h3 className="text-base sm:text-lg font-semibold">{t('Quick Actions')}</h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <button 
@@ -154,7 +154,7 @@ const TeacherDashboard = () => {
               >
                 <UserPlus className="w-4 sm:w-5 h-4 sm:h-5 mb-2 group-hover:scale-110 transition-transform duration-300" />
                 <div>
-                  <p className="font-medium text-sm sm:text-base">{t('mark_attendance_button')}</p>
+                  <p className="font-medium text-sm sm:text-base">{t('Mark Attendance')}</p>
                   <p className="text-xs opacity-80">{t('manual_attendance_entry')}</p>
                   {!isOnline && <p className="text-xs text-secondary-foreground mt-1">{t('offline_mode')}</p>}
                 </div>
@@ -166,7 +166,7 @@ const TeacherDashboard = () => {
               >
                 <Camera className="w-4 sm:w-5 h-4 sm:h-5 mb-2 group-hover:scale-110 transition-transform duration-300" />
                 <div>
-                  <p className="font-medium text-sm sm:text-base">{t('camera_attendance_button')}</p>
+                  <p className="font-medium text-sm sm:text-base">{t('Camera Attendance')}</p>
                   <p className="text-xs opacity-80">{t('face_recognition_mode')}</p>
                 </div>
               </button>

@@ -1,13 +1,27 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, UserCheck, Scan, RefreshCw, CheckCircle } from "lucide-react";
+import { ArrowLeft, Camera, UserCheck, Scan, RefreshCw, CheckCircle, AlertCircle, Info } from "lucide-react";
 import { useToast } from "../hooks/useToast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface DetectedFace {
   name: string;
   rollNumber: string;
   spoofed: boolean;
   emotion: string;
+  attendanceMarked?: boolean;
+  attendanceAlreadyMarked?: boolean;
+  recognitionConfidence?: number;
+  livenessConfidence?: number;
+  isLive?: boolean;
 }
 
 const CameraAttendance = () => {
@@ -25,6 +39,8 @@ const CameraAttendance = () => {
   const [markedStudents, setMarkedStudents] = useState<Set<string>>(new Set());
   const [currentPeriod, setCurrentPeriod] = useState("");
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showAlreadyMarkedDialog, setShowAlreadyMarkedDialog] = useState(false);
+  const [alreadyMarkedStudents, setAlreadyMarkedStudents] = useState<string[]>([]);
 
   const periods = [
     "1st Period (9:00-10:00)",
@@ -182,7 +198,47 @@ const CameraAttendance = () => {
           
           if (result.success && result.detectedFaces.length > 0) {
             setDetectedFaces(result.detectedFaces);
-            showToast('success', 'Faces Detected', `Found ${result.detectedFaces.length} students`);
+            
+            // Check attendance status for each detected face
+            let newAttendanceCount = 0;
+            let alreadyMarkedCount = 0;
+            let unknownCount = 0;
+            const alreadyMarkedList: string[] = [];
+            
+            result.detectedFaces.forEach((face: DetectedFace) => {
+              if (face.name === "Unknown") {
+                unknownCount++;
+              } else if (face.attendanceAlreadyMarked) {
+                alreadyMarkedCount++;
+                alreadyMarkedList.push(`${face.name} (${face.rollNumber})`);
+              } else if (face.attendanceMarked) {
+                newAttendanceCount++;
+              }
+            });
+            
+            // Show appropriate notifications
+            if (alreadyMarkedCount > 0) {
+              // Show alert dialog for already marked attendance
+              setAlreadyMarkedStudents(alreadyMarkedList);
+              setShowAlreadyMarkedDialog(true);
+              
+              // Also show toast for quick reference
+              if (newAttendanceCount === 0) {
+                showToast('info', 'Attendance Already Marked', 
+                  `Attendance already marked for ${alreadyMarkedCount} student(s) today`);
+              } else {
+                showToast('success', 'Attendance Status', 
+                  `✅ Marked: ${newAttendanceCount} new | ℹ️ Already marked: ${alreadyMarkedCount}`);
+              }
+            } else if (newAttendanceCount > 0) {
+              showToast('success', 'Attendance Marked Successfully', 
+                `Attendance marked for ${newAttendanceCount} student(s)`);
+            } else if (unknownCount > 0) {
+              showToast('warning', 'Unknown Faces', 
+                `${unknownCount} face(s) not recognized. Please ensure proper registration.`);
+            } else {
+              showToast('success', 'Faces Detected', `Found ${result.detectedFaces.length} students`);
+            }
           } else {
             setDetectedFaces([]);
             showToast('info', 'No Faces Found', result.message || 'No recognizable faces were detected.');
@@ -372,11 +428,15 @@ const CameraAttendance = () => {
                       className={`p-3 rounded-lg border transition-all ${
                         face.spoofed 
                           ? 'bg-danger/10 border-danger/30' 
+                          : face.attendanceAlreadyMarked
+                          ? 'bg-warning/10 border-warning/30'
+                          : face.name === "Unknown"
+                          ? 'bg-muted border-muted-foreground/30'
                           : 'bg-success/10 border-success/30'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium">{face.name}</p>
                           <p className="text-sm text-muted-foreground">
                             Roll Number: {face.rollNumber}
@@ -384,13 +444,41 @@ const CameraAttendance = () => {
                           <p className="text-sm text-muted-foreground">
                             Emotion: {face.emotion}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            Spoofing Detected: {face.spoofed ? 'Yes' : 'No'}
-                          </p>
+                          {face.recognitionConfidence && (
+                            <p className="text-xs text-muted-foreground">
+                              Confidence: {face.recognitionConfidence}%
+                            </p>
+                          )}
+                          {face.attendanceAlreadyMarked && (
+                            <p className="text-xs font-medium text-warning mt-1">
+                              ⚠️ Attendance already marked today
+                            </p>
+                          )}
+                          {face.attendanceMarked && !face.attendanceAlreadyMarked && (
+                            <p className="text-xs font-medium text-success mt-1">
+                              ✅ Attendance marked successfully
+                            </p>
+                          )}
+                          {face.spoofed && (
+                            <p className="text-xs font-medium text-danger mt-1">
+                              ❌ Spoofing detected
+                            </p>
+                          )}
                         </div>
-                        {!face.spoofed && (
-                          <CheckCircle className="w-5 h-5 text-success" />
-                        )}
+                        <div className="flex flex-col items-center gap-1">
+                          {!face.spoofed && face.name !== "Unknown" && (
+                            face.attendanceAlreadyMarked ? (
+                              <div className="text-center">
+                                <div className="w-8 h-8 rounded-full bg-warning/20 flex items-center justify-center">
+                                  <span className="text-warning text-lg">ℹ️</span>
+                                </div>
+                                <span className="text-xs text-warning">Already</span>
+                              </div>
+                            ) : (
+                              <CheckCircle className="w-6 h-6 text-success" />
+                            )
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -421,6 +509,40 @@ const CameraAttendance = () => {
           </div>
         </div>
       </main>
+
+      {/* Alert Dialog for Already Marked Attendance */}
+      <AlertDialog open={showAlreadyMarkedDialog} onOpenChange={setShowAlreadyMarkedDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Info className="w-5 h-5 text-warning" />
+              Attendance Already Marked
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>The following students already have their attendance marked for today:</p>
+              <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
+                <ul className="space-y-1">
+                  {alreadyMarkedStudents.map((student, index) => (
+                    <li key={index} className="flex items-center gap-2">
+                      <span className="text-warning">•</span>
+                      <span className="font-medium">{student}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Students can only mark attendance once per day. If you believe this is an error, 
+                please contact your administrator.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowAlreadyMarkedDialog(false)}>
+              Understood
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

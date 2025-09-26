@@ -13,7 +13,7 @@ import CameraAttendance from "./pages/CameraAttendance";
 import StudentDashboard from "./pages/dashboards/StudentDashboard";
 import TeacherDashboard from "./pages/dashboards/TeacherDashboard";
 import AdminDashboard from "./pages/dashboards/AdminDashboard";
-import EducationDashboard from "./pages/dashboards/EducationDashboard";
+import EducationDashboard from "@/pages/dashboards/EducationDashboard";
 import NotFound from "./pages/NotFound";
 import LocationCheckPage from "./pages/LocationCheckPage";
 import UserManagementPage from "./pages/UserManagementPage";

@@ -5,6 +5,9 @@ import { mockAPI, School as SchoolType } from "../../utils/mockData";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTranslation } from 'react-i18next';
 
+// Use SchoolType directly since we've made all properties optional in the base interface
+type ExtendedSchoolType = SchoolType;
+
 interface EducationStats {
   totalSchools: number;
   totalStudents: number;
@@ -16,13 +19,105 @@ interface EducationStats {
 const EducationDashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<EducationStats | null>(null);
-  const [schools, setSchools] = useState<SchoolType[]>([]);
-  const [filteredSchools, setFilteredSchools] = useState<SchoolType[]>([]);
+  const [schools, setSchools] = useState<ExtendedSchoolType[]>([]);
+  const [filteredSchools, setFilteredSchools] = useState<ExtendedSchoolType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedSchool, setSelectedSchool] = useState<SchoolType | null>(null);
+  const [selectedSchool, setSelectedSchool] = useState<ExtendedSchoolType | null>(null);
   const [showSchoolDetails, setShowSchoolDetails] = useState(false);
+  const [showCharts, setShowCharts] = useState(false);
+  const [showCustomReportDialog, setShowCustomReportDialog] = useState(false);
+  const [selectedReportType, setSelectedReportType] = useState('');
   const { t } = useTranslation();
+
+  // Toggle charts visibility
+  const toggleCharts = () => {
+    setShowCharts(!showCharts);
+  };
+
+  // Export district data to CSV
+  const exportDistrictData = (): void => {
+    try {
+      if (!schools || schools.length === 0) {
+        console.error('No school data available to export');
+        return;
+      }
+
+      // Create CSV header
+      const headers = ['School Name', 'ID', 'Location', 'Total Students', 'Current Students', 'Teachers', 'Attendance %', 'Dropout Rate %', 'Last Updated'];
+
+      // Create CSV rows with null checks
+      const rows = schools.map(school => {
+        const currentStudents = school.currentStudents ?? (school.totalStudents ?? 0);
+        const totalStudents = school.totalStudents ?? 0;
+        const totalTeachers = school.totalTeachers ?? 0;
+        const lastUpdated = typeof school.lastUpdated === 'string' 
+          ? school.lastUpdated.split('T')[0] 
+          : new Date().toISOString().split('T')[0];
+        
+        return {
+          name: `"${school.name || 'N/A'}"`,
+          id: school.id?.toString() || 'N/A',
+          location: `"${school.location || 'N/A'}"`,
+          totalStudents,
+          currentStudents,
+          teachers: totalTeachers,
+          attendance: school.attendanceRate?.toFixed(1) || 'N/A',
+          dropout: school.dropoutRate?.toFixed(1) || 'N/A',
+          lastUpdated
+        };
+      });
+      
+      // Convert to CSV format
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => `${row.name},${row.id},${row.location},${row.totalStudents},${row.currentStudents},${row.teachers},${row.attendance},${row.dropout},${row.lastUpdated}`)
+      ].join('\n');
+      
+      // Create download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `district_report_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Failed to export data. Please try again.');
+    }
+  };
+
+  // Filter schools by high dropout rate
+  const analyzeDropout = (): void => {
+    try {
+      const highDropoutSchools = schools.filter(school => 
+        (school.dropoutRate || 0) > 3 // Threshold of 3% with fallback to 0 if undefined
+      );
+      setFilteredSchools(highDropoutSchools);
+      
+      // Show alert with analysis
+      alert(`Found ${highDropoutSchools.length} schools with dropout rate above 3%`);
+    } catch (error) {
+      console.error('Error analyzing dropout rates:', error);
+      alert('Failed to analyze dropout rates. Please try again.');
+    }
+  };
+
+  // Generate custom report
+  const generateCustomReport = (type: string): void => {
+    setSelectedReportType(type);
+    // Here you would typically make an API call to generate the report
+    console.log(`Generating ${type} report...`);
+    // Show dialog to confirm report generation
+    setShowCustomReportDialog(true);
+    
+    // Close the dialog after a short delay
+    setTimeout(() => {
+      setShowCustomReportDialog(false);
+    }, 1500);
+  };
 
   const attendanceData = [
     { name: 'Jan', 'Avg. Attendance': 85, 'Target': 90 },
@@ -64,9 +159,32 @@ const EducationDashboard = () => {
         mockAPI.getDashboardStats('education') as Promise<EducationStats>,
         mockAPI.getSchools()
       ]);
-      setStats(statsData);
-      setSchools(schoolsData);
-      setFilteredSchools(schoolsData);
+      
+      // Ensure all schools have the required properties with defaults
+      const processedSchools = (schoolsData || []).map(school => ({
+        ...school,
+        totalStudents: school.totalStudents || 0,
+        totalTeachers: school.totalTeachers || 0,
+        currentStudents: school.currentStudents || school.totalStudents || 0,
+        attendanceRate: school.attendanceRate || 0,
+        dropoutRate: school.dropoutRate || 0,
+        lastUpdated: school.lastUpdated || new Date().toISOString().split('T')[0]
+      }));
+      
+      setStats({
+        totalSchools: processedSchools.length,
+        totalStudents: processedSchools.reduce((sum, school) => sum + (school.totalStudents || 0), 0),
+        totalTeachers: processedSchools.reduce((sum, school) => sum + (school.totalTeachers || 0), 0),
+        averageAttendance: processedSchools.length > 0 
+          ? processedSchools.reduce((sum, school) => sum + (school.attendanceRate || 0), 0) / processedSchools.length
+          : 0,
+        averageDropoutRate: processedSchools.length > 0
+          ? processedSchools.reduce((sum, school) => sum + (school.dropoutRate || 0), 0) / processedSchools.length
+          : 0
+      });
+      
+      setSchools(processedSchools);
+      setFilteredSchools(processedSchools);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -79,13 +197,15 @@ const EducationDashboard = () => {
     setShowSchoolDetails(true);
   };
 
-  const getDropoutColor = (rate: number) => {
+  const getDropoutColor = (rate: number | undefined) => {
+    if (!rate) return 'text-muted-foreground';
     if (rate <= 2) return 'text-success';
     if (rate <= 5) return 'text-warning';
     return 'text-destructive';
   };
 
-  const getAttendanceColor = (rate: number) => {
+  const getAttendanceColor = (rate: number | undefined) => {
+    if (!rate) return 'text-muted-foreground';
     if (rate >= 90) return 'text-success';
     if (rate >= 75) return 'text-warning';
     return 'text-destructive';
@@ -105,150 +225,164 @@ const EducationDashboard = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm py-3">
+        <div className="container mx-auto px-3">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
+              className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
               aria-label="Go back"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </button>
             <div>
-              <h1 className="text-xl font-semibold">{t('Education Dashboard')}</h1>
-              <p className="text-sm text-muted-foreground">{t('Key performance metrics for schools in the Amritsar District')}</p>
+              <h1 className="text-lg font-semibold">{t('Education Dashboard')}</h1>
+              <p className="text-xs text-muted-foreground">{t('Key performance metrics for schools in the Amritsar District')}</p>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
-        <div className="space-y-6 animate-fade-in">
+      <main className="container mx-auto px-3 py-4">
+        <div className="space-y-4 animate-fade-in">
           {/* Welcome Section */}
-          <div className="card-education rounded-2xl p-6 text-center">
-            <div className="w-16 sm:w-20 h-16 sm:h-20 mx-auto bg-gradient-to-br from-education to-education/80 rounded-full flex items-center justify-center shadow-lg mb-4">
-              <BarChart3 className="w-8 sm:w-10 h-8 sm:h-10 text-white" />
+          <div className="card-education rounded-2xl p-4 text-center">
+            <div className="w-14 h-14 mx-auto bg-gradient-to-br from-education to-education/80 rounded-full flex items-center justify-center shadow-lg mb-3">
+              <BarChart3 className="w-7 h-7 text-white" />
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-2">{t(' Education Office, Punjab')}</h2>
-            <p className="text-muted-foreground">{t('Amritsar')}</p>
-            <div className="mt-4 inline-flex items-center px-4 py-2 bg-background/20 rounded-full">
-              <span className="text-sm font-medium">{t('Monitoring 5 Schools', { totalSchools: stats?.totalSchools })}</span>
+            <h2 className="text-lg font-bold text-foreground mb-1">{t(' Education Office, Punjab')}</h2>
+            <p className="text-sm text-muted-foreground">{t('Amritsar')}</p>
+            <div className="mt-3 inline-flex items-center px-3 py-1.5 bg-background/20 rounded-full">
+              <span className="text-xs font-medium">{t('Monitoring 5 Schools', { totalSchools: stats?.totalSchools })}</span>
             </div>
           </div>
 
           {/* Key Performance Indicators */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="bg-card rounded-xl p-6 border border-border shadow-sm hover:shadow-lg hover:shadow-education/10 transition-all duration-300 hover:scale-[1.02] group">
-              <div className="flex items-center justify-between mb-3">
-                <School className="w-8 h-8 text-education group-hover:scale-110 transition-transform duration-300" />
-                <span className="text-2xl font-bold text-foreground group-hover:text-education transition-colors duration-300">{stats?.totalSchools}</span>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+            <div className="bg-card rounded-xl p-4 border border-border shadow-sm hover:shadow-lg hover:shadow-education/10 transition-all duration-300 hover:scale-[1.02] group">
+              <div className="flex items-center justify-between mb-2">
+                <School className="w-7 h-7 text-education group-hover:scale-110 transition-transform duration-300" />
+                <span className="text-xl font-bold text-foreground group-hover:text-education transition-colors duration-300">{stats?.totalSchools}</span>
               </div>
-              <h3 className="font-semibold text-foreground">{t('Total Schools')}</h3>
-              <p className="text-sm text-muted-foreground">{t('Active Institutions')}</p>
-              <div className="mt-2 w-full bg-muted rounded-full h-1">
+              <h3 className="font-semibold text-sm text-foreground">{t('Total Schools')}</h3>
+              <p className="text-xs text-muted-foreground">{t('Active Institutions')}</p>
+              <div className="mt-1.5 w-full bg-muted rounded-full h-1">
                 <div className="bg-education h-1 rounded-full transition-all duration-500 group-hover:w-full" style={{ width: '85%' }}></div>
               </div>
             </div>
 
-            <div className="bg-card rounded-xl p-6 border border-border shadow-sm hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 hover:scale-[1.02] group">
-              <div className="flex items-center justify-between mb-3">
-                <Users className="w-8 h-8 text-primary group-hover:scale-110 transition-transform duration-300" />
-                <span className="text-2xl font-bold text-foreground group-hover:text-primary transition-colors duration-300">{stats?.totalStudents?.toLocaleString()}</span>
+            <div className="bg-card rounded-xl p-4 border border-border shadow-sm hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 hover:scale-[1.02] group">
+              <div className="flex items-center justify-between mb-2">
+                <Users className="w-7 h-7 text-primary group-hover:scale-110 transition-transform duration-300" />
+                <span className="text-xl font-bold text-foreground group-hover:text-primary transition-colors duration-300">{stats?.totalStudents?.toLocaleString()}</span>
               </div>
-              <h3 className="font-semibold text-foreground">{t('Total Students')}</h3>
-              <p className="text-sm text-muted-foreground">{t('enrolled across')}</p>
-              <div className="mt-2 w-full bg-muted rounded-full h-1">
+              <h3 className="font-semibold text-sm text-foreground">{t('Total Students')}</h3>
+              <p className="text-xs text-muted-foreground">{t('enrolled across')}</p>
+              <div className="mt-1.5 w-full bg-muted rounded-full h-1">
                 <div className="bg-primary h-1 rounded-full transition-all duration-500 group-hover:w-full" style={{ width: '92%' }}></div>
               </div>
             </div>
 
-            <div className="bg-card rounded-xl p-6 border border-border shadow-sm hover:shadow-lg hover:shadow-accent/10 transition-all duration-300 hover:scale-[1.02] group">
-              <div className="flex items-center justify-between mb-3">
-                <UserPlus className="w-8 h-8 text-accent group-hover:scale-110 transition-transform duration-300" />
-                <span className="text-2xl font-bold text-foreground group-hover:text-accent transition-colors duration-300">{stats?.totalTeachers}</span>
+            <div className="bg-card rounded-xl p-4 border border-border shadow-sm hover:shadow-lg hover:shadow-accent/10 transition-all duration-300 hover:scale-[1.02] group">
+              <div className="flex items-center justify-between mb-2">
+                <UserPlus className="w-7 h-7 text-accent group-hover:scale-110 transition-transform duration-300" />
+                <span className="text-xl font-bold text-foreground group-hover:text-accent transition-colors duration-300">{stats?.totalTeachers}</span>
               </div>
-              <h3 className="font-semibold text-foreground">{t('Total Teachers')}</h3>
-              <p className="text-sm text-muted-foreground">{t('Teaching Staff')}</p>
-              <div className="mt-2 w-full bg-muted rounded-full h-1">
+              <h3 className="font-semibold text-sm text-foreground">{t('Total Teachers')}</h3>
+              <p className="text-xs text-muted-foreground">{t('Teaching Staff')}</p>
+              <div className="mt-1.5 w-full bg-muted rounded-full h-1">
                 <div className="bg-accent h-1 rounded-full transition-all duration-500 group-hover:w-full" style={{ width: '78%' }}></div>
               </div>
             </div>
 
-            <div className="bg-card rounded-xl p-6 border border-border shadow-sm hover:shadow-lg hover:shadow-success/10 transition-all duration-300 hover:scale-[1.02] group">
-              <div className="flex items-center justify-between mb-3">
-                <BarChart3 className="w-8 h-8 text-success group-hover:scale-110 transition-transform duration-300" />
-                <span className={`text-2xl font-bold transition-colors duration-300 ${getAttendanceColor(stats?.averageAttendance || 0)} group-hover:text-success`}>
+            <div className="bg-card rounded-xl p-4 border border-border shadow-sm hover:shadow-lg hover:shadow-success/10 transition-all duration-300 hover:scale-[1.02] group">
+              <div className="flex items-center justify-between mb-2">
+                <BarChart3 className="w-7 h-7 text-success group-hover:scale-110 transition-transform duration-300" />
+                <span className={`text-xl font-bold transition-colors duration-300 ${getAttendanceColor(stats?.averageAttendance || 0)} group-hover:text-success`}>
                   {stats?.averageAttendance?.toFixed(1)}%
                 </span>
               </div>
-              <h3 className="font-semibold text-foreground">{t('Average Attendance')}</h3>
-              <p className="text-sm text-muted-foreground">{t('District Average ')}</p>
-              <div className="mt-2 w-full bg-muted rounded-full h-1">
+              <h3 className="font-semibold text-sm text-foreground">{t('Average Attendance')}</h3>
+              <p className="text-xs text-muted-foreground">{t('District Average ')}</p>
+              <div className="mt-1.5 w-full bg-muted rounded-full h-1">
                 <div className="bg-success h-1 rounded-full transition-all duration-500 group-hover:w-full" style={{ width: `${stats?.averageAttendance || 0}%` }}></div>
               </div>
             </div>
 
-            <div className="bg-card rounded-xl p-6 border border-border shadow-sm hover:shadow-lg hover:shadow-destructive/10 transition-all duration-300 hover:scale-[1.02] group">
-              <div className="flex items-center justify-between mb-3">
-                <TrendingDown className="w-8 h-8 text-destructive group-hover:scale-110 transition-transform duration-300" />
-                <span className={`text-2xl font-bold transition-colors duration-300 ${getDropoutColor(stats?.averageDropoutRate || 0)} group-hover:text-destructive`}>
+            <div className="bg-card rounded-xl p-4 border border-border shadow-sm hover:shadow-lg hover:shadow-destructive/10 transition-all duration-300 hover:scale-[1.02] group">
+              <div className="flex items-center justify-between mb-2">
+                <TrendingDown className="w-7 h-7 text-destructive group-hover:scale-110 transition-transform duration-300" />
+                <span className={`text-xl font-bold transition-colors duration-300 ${getDropoutColor(stats?.averageDropoutRate || 0)} group-hover:text-destructive`}>
                   {stats?.averageDropoutRate?.toFixed(1)}%
                 </span>
               </div>
-              <h3 className="font-semibold text-foreground">{t('Dropout Rate ')}</h3>
-              <p className="text-sm text-muted-foreground">{t('District Average Dropout')}</p>
-              <div className="mt-2 w-full bg-muted rounded-full h-1">
+              <h3 className="font-semibold text-sm text-foreground">{t('Dropout Rate ')}</h3>
+              <p className="text-xs text-muted-foreground">{t('District Average Dropout')}</p>
+              <div className="mt-1.5 w-full bg-muted rounded-full h-1">
                 <div className="bg-destructive h-1 rounded-full transition-all duration-500 group-hover:w-full" style={{ width: `${(stats?.averageDropoutRate || 0) * 10}%` }}></div>
               </div>
             </div>
           </div>
 
           {/* Mid-Day Meal Prediction for District */}
-          <div className="bg-card rounded-xl p-6 border border-border shadow-sm flex items-center justify-between">
+          <div className="bg-card rounded-xl p-4 border border-border shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">{t('Predicted Mid Day Meal')}</p>
-              <p className="text-3xl font-bold text-foreground">15000</p>
+              <p className="text-xs text-muted-foreground mb-1">{t('Predicted Mid Day Meal')}</p>
+              <p className="text-2xl font-bold text-foreground">15000</p>
             </div>
-            <School className="w-10 h-10 text-education" />
+            <School className="w-8 h-8 text-education" />
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">{t('Quick Actions Title')}</h3>
+          <div className="bg-card rounded-xl p-4 border border-border shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-semibold">{t('Quick Actions Title')}</h3>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <button className="btn-primary text-left p-4 h-auto group hover:shadow-lg hover:shadow-primary/20 transition-all duration-300">
-                <Download className="w-5 h-5 mb-2 group-hover:scale-110 transition-transform duration-300" />
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+              <button 
+                onClick={exportDistrictData}
+                className="btn-primary text-left p-3 h-auto group hover:shadow-lg hover:shadow-primary/20 transition-all duration-300"
+              >
+                <Download className="w-4 h-4 mb-1.5 group-hover:scale-110 transition-transform duration-300" />
                 <div>
-                  <p className="font-medium">{t('Export District Report')}</p>
-                  <p className="text-xs opacity-80">{t('Complete CSV Data')}</p>
+                  <p className="font-medium text-sm">{t('Export District Data')}</p>
+                  <p className="text-xs opacity-80">{t('Download as CSV')}</p>
                 </div>
               </button>
               
-              <button className="btn-secondary text-left p-4 h-auto group hover:shadow-lg hover:shadow-secondary/20 transition-all duration-300">
-                <BarChart3 className="w-5 h-5 mb-2 group-hover:scale-110 transition-transform duration-300" />
+              <button 
+                onClick={toggleCharts}
+                className="btn-secondary text-left p-3 h-auto group hover:shadow-lg hover:shadow-secondary/20 transition-all duration-300"
+              >
+                <BarChart3 className="w-4 h-4 mb-1.5 group-hover:scale-110 transition-transform duration-300" />
                 <div>
-                  <p className="font-medium">{t('Generate Charts')}</p>
+                  <p className="font-medium text-sm">
+                    {showCharts ? t('Hide Charts') : t('Show Charts')}
+                  </p>
                   <p className="text-xs opacity-80">{t('Visual Analytics')}</p>
                 </div>
               </button>
 
-              <button className="btn-secondary text-left p-4 h-auto group hover:shadow-lg hover:shadow-destructive/20 transition-all duration-300">
-                <TrendingDown className="w-5 h-5 mb-2 group-hover:scale-110 transition-transform duration-300" />
+              <button 
+                onClick={analyzeDropout}
+                className="btn-secondary text-left p-3 h-auto group hover:shadow-lg hover:shadow-destructive/20 transition-all duration-300"
+              >
+                <TrendingDown className="w-4 h-4 mb-1.5 group-hover:scale-110 transition-transform duration-300" />
                 <div>
-                  <p className="font-medium">{t('Dropout Analysis')}</p>
-                  <p className="text-xs opacity-80">{t('Identify at risk Schools')}</p>
+                  <p className="font-medium text-sm">{t('Dropout Analysis')}</p>
+                  <p className="text-xs opacity-80">{t('Identify at-risk Schools')}</p>
                 </div>
               </button>
 
-              <button className="btn-secondary text-left p-4 h-auto group hover:shadow-lg hover:shadow-accent/20 transition-all duration-300">
-                <Filter className="w-5 h-5 mb-2 group-hover:scale-110 transition-transform duration-300" />
+              <button 
+                onClick={() => setShowCustomReportDialog(true)}
+                className="btn-secondary text-left p-3 h-auto group hover:shadow-lg hover:shadow-accent/20 transition-all duration-300"
+              >
+                <Filter className="w-4 h-4 mb-1.5 group-hover:scale-110 transition-transform duration-300" />
                 <div>
-                  <p className="font-medium">{t('Custom Reports')}</p>
-                  <p className="text-xs opacity-80">{t('Filtered Data Views')}</p>
+                  <p className="font-medium text-sm">{t('Custom Reports')}</p>
+                  <p className="text-xs opacity-80">{t('Generate Custom Reports')}</p>
                 </div>
               </button>
             </div>

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, UserPlus, Settings, Shield, Activity, Database, Download, Camera, BookOpen } from "lucide-react";
+import { ArrowLeft, Users, UserPlus, Settings, Shield, Activity, Database, Download, Camera, BookOpen, UserCheck } from "lucide-react";
 import { mockAPI } from "../../utils/mockData";
 import { useTranslation } from 'react-i18next';
+import { FaceEnrollment } from '@/components/admin/FaceEnrollment';
 
 interface AdminStats {
   totalStudents: number;
@@ -25,7 +26,7 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<UserManagementData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTab, setSelectedTab] = useState('overview');
+  const [selectedTab, setSelectedTab] = useState('face-enrollment');
   const [isOfflineModeEnabled, setIsOfflineModeEnabled] = useState(true); // Changed to true
   const [isAutoBackupEnabled, setIsAutoBackupEnabled] = useState(true);
   const [areNotificationsEnabled, setAreNotificationsEnabled] = useState(true); // Changed to true to make it enabled
@@ -257,6 +258,19 @@ const AdminDashboard = () => {
                 >
                   {t('Tab System Settings')}
                 </button>
+                <button
+                  onClick={() => setSelectedTab('face-enrollment')}
+                  className={`py-4 px-2 border-b-2 font-medium text-sm ${
+                    selectedTab === 'face-enrollment'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4" />
+                    <span>Face Enrollment</span>
+                  </div>
+                </button>
               </nav>
             </div>
 
@@ -416,6 +430,14 @@ const AdminDashboard = () => {
                 </div>
               )}
 
+              {selectedTab === 'face-enrollment' && (
+                <div className="space-y-6">
+                  <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
+                    <FaceEnrollment onClose={() => setSelectedTab('overview')} />
+                  </div>
+                </div>
+              )}
+              
               {selectedTab === 'settings' && (
                 <div className="space-y-6">
                   <h3 className="text-lg font-semibold">{t('System Configuration')}</h3>
