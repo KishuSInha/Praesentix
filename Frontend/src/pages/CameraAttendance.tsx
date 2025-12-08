@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Camera, UserCheck, Scan, RefreshCw, CheckCircle, AlertCircle, Info } from "lucide-react";
 import { useToast } from "../hooks/useToast";
+import govEmblem from "../assets/government-emblem.svg";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -193,8 +194,11 @@ const CameraAttendance = () => {
           // Import the API service
           const apiService = (await import('../utils/api')).default;
           
-          // Use the API service to recognize faces
-          const result = await apiService.recognizeFace(base64Image);
+          // Use the API service to recognize faces with period and date
+          const result = await apiService.recognizeFace(base64Image, {
+            period: currentPeriod,
+            date: attendanceDate
+          });
           
           if (result.success && result.detectedFaces.length > 0) {
             setDetectedFaces(result.detectedFaces);
@@ -203,10 +207,13 @@ const CameraAttendance = () => {
             let newAttendanceCount = 0;
             let alreadyMarkedCount = 0;
             let unknownCount = 0;
+            let spoofedCount = 0;
             const alreadyMarkedList: string[] = [];
             
             result.detectedFaces.forEach((face: DetectedFace) => {
-              if (face.name === "Unknown") {
+              if (face.spoofed) {
+                spoofedCount++;
+              } else if (face.name === "Unknown") {
                 unknownCount++;
               } else if (face.attendanceAlreadyMarked) {
                 alreadyMarkedCount++;
@@ -217,26 +224,31 @@ const CameraAttendance = () => {
             });
             
             // Show appropriate notifications
+            if (spoofedCount > 0) {
+              showToast('error', 'Spoofing Detected', 
+                `${spoofedCount} face(s) detected as spoofed (photo/screen). Please use live camera.`);
+            }
+            
             if (alreadyMarkedCount > 0) {
               // Show alert dialog for already marked attendance
               setAlreadyMarkedStudents(alreadyMarkedList);
               setShowAlreadyMarkedDialog(true);
               
               // Also show toast for quick reference
-              if (newAttendanceCount === 0) {
+              if (newAttendanceCount === 0 && spoofedCount === 0) {
                 showToast('info', 'Attendance Already Marked', 
                   `Attendance already marked for ${alreadyMarkedCount} student(s) today`);
-              } else {
+              } else if (newAttendanceCount > 0) {
                 showToast('success', 'Attendance Status', 
                   `✅ Marked: ${newAttendanceCount} new | ℹ️ Already marked: ${alreadyMarkedCount}`);
               }
             } else if (newAttendanceCount > 0) {
               showToast('success', 'Attendance Marked Successfully', 
                 `Attendance marked for ${newAttendanceCount} student(s)`);
-            } else if (unknownCount > 0) {
+            } else if (unknownCount > 0 && spoofedCount === 0) {
               showToast('warning', 'Unknown Faces', 
                 `${unknownCount} face(s) not recognized. Please ensure proper registration.`);
-            } else {
+            } else if (spoofedCount === 0 && unknownCount === 0 && alreadyMarkedCount === 0) {
               showToast('success', 'Faces Detected', `Found ${result.detectedFaces.length} students`);
             }
           } else {
@@ -274,20 +286,23 @@ const CameraAttendance = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
+      <header className="bg-primary text-primary-foreground shadow-md">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4 mb-4">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
               aria-label="Go back"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <h1 className="text-xl font-semibold">Camera Attendance</h1>
-              <p className="text-sm text-muted-foreground">Use face recognition for quick attendance</p>
+            <div className="flex items-center space-x-3">
+              <img src={govEmblem} alt="Government Emblem" className="w-10 h-10" />
+              <div>
+                <h1 className="text-xl font-semibold">Face Recognition Attendance</h1>
+                <p className="text-sm opacity-90">Upastithi - AI-Powered Attendance System</p>
+              </div>
             </div>
           </div>
 
@@ -297,14 +312,14 @@ const CameraAttendance = () => {
               <input
                 ref={userNameRef}
                 type="text"
-                className="input-field w-full"
+                className="bg-white border border-gray-300 rounded-lg py-3 px-4 w-full text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 placeholder="Optional"
               />
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Period</label>
               <select
-                className="input-field w-full"
+                className="bg-white border border-gray-300 rounded-lg py-3 px-4 w-full text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 value={currentPeriod}
                 onChange={(e) => setCurrentPeriod(e.target.value)}
               >
@@ -318,7 +333,7 @@ const CameraAttendance = () => {
               <label className="block text-sm font-medium mb-2">Date</label>
               <input
                 type="date"
-                className="input-field w-full"
+                className="bg-white border border-gray-300 rounded-lg py-3 px-4 w-full text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 value={attendanceDate}
                 onChange={(e) => setAttendanceDate(e.target.value)}
               />
@@ -330,9 +345,9 @@ const CameraAttendance = () => {
       <main className="container mx-auto px-4 py-6">
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-lg">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
+                <h2 className="text-lg font-semibold flex items-center gap-2 text-gray-900">
                   <Camera className="w-5 h-5" />
                   Camera Feed
                 </h2>
@@ -408,8 +423,8 @@ const CameraAttendance = () => {
           </div>
 
           <div className="space-y-4">
-            <div className="bg-card rounded-lg border border-border p-6">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-lg">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-900">
                 <UserCheck className="w-5 h-5" />
                 Detected Students ({detectedFaces.length})
               </h3>
@@ -427,12 +442,12 @@ const CameraAttendance = () => {
                       key={index}
                       className={`p-3 rounded-lg border transition-all ${
                         face.spoofed 
-                          ? 'bg-danger/10 border-danger/30' 
+                          ? 'bg-red-500/10 border-red-500/30' 
                           : face.attendanceAlreadyMarked
-                          ? 'bg-warning/10 border-warning/30'
+                          ? 'bg-yellow-500/10 border-yellow-500/30'
                           : face.name === "Unknown"
                           ? 'bg-muted border-muted-foreground/30'
-                          : 'bg-success/10 border-success/30'
+                          : 'bg-green-500/10 border-green-500/30'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -449,33 +464,50 @@ const CameraAttendance = () => {
                               Confidence: {face.recognitionConfidence}%
                             </p>
                           )}
-                          {face.attendanceAlreadyMarked && (
-                            <p className="text-xs font-medium text-warning mt-1">
+                          {face.spoofed && (
+                            <div className="mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded">
+                              <p className="text-xs font-bold text-red-600">
+                                ❌ SPOOFING DETECTED
+                              </p>
+                              <p className="text-xs text-red-600">
+                                Photo/Screen detected. Use live camera.
+                              </p>
+                              {face.livenessConfidence && (
+                                <p className="text-xs text-red-600">
+                                  Liveness: {face.livenessConfidence}%
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {!face.spoofed && face.attendanceAlreadyMarked && (
+                            <p className="text-xs font-medium text-yellow-600 mt-1">
                               ⚠️ Attendance already marked today
                             </p>
                           )}
-                          {face.attendanceMarked && !face.attendanceAlreadyMarked && (
-                            <p className="text-xs font-medium text-success mt-1">
+                          {!face.spoofed && face.attendanceMarked && !face.attendanceAlreadyMarked && (
+                            <p className="text-xs font-medium text-green-600 mt-1">
                               ✅ Attendance marked successfully
-                            </p>
-                          )}
-                          {face.spoofed && (
-                            <p className="text-xs font-medium text-danger mt-1">
-                              ❌ Spoofing detected
                             </p>
                           )}
                         </div>
                         <div className="flex flex-col items-center gap-1">
-                          {!face.spoofed && face.name !== "Unknown" && (
+                          {face.spoofed ? (
+                            <div className="text-center">
+                              <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                                <AlertCircle className="w-5 h-5 text-red-600" />
+                              </div>
+                              <span className="text-xs text-red-600">Spoofed</span>
+                            </div>
+                          ) : face.name !== "Unknown" && (
                             face.attendanceAlreadyMarked ? (
                               <div className="text-center">
-                                <div className="w-8 h-8 rounded-full bg-warning/20 flex items-center justify-center">
-                                  <span className="text-warning text-lg">ℹ️</span>
+                                <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                                  <span className="text-yellow-600 text-lg">ℹ️</span>
                                 </div>
-                                <span className="text-xs text-warning">Already</span>
+                                <span className="text-xs text-yellow-600">Already</span>
                               </div>
                             ) : (
-                              <CheckCircle className="w-6 h-6 text-success" />
+                              <CheckCircle className="w-6 h-6 text-green-600" />
                             )
                           )}
                         </div>
@@ -497,9 +529,9 @@ const CameraAttendance = () => {
               )}
             </div>
 
-            <div className="bg-card rounded-lg border border-border p-6">
-              <h3 className="text-lg font-semibold mb-3">Instructions</h3>
-              <div className="space-y-2 text-sm text-muted-foreground">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-lg">
+              <h3 className="text-lg font-semibold mb-3 text-gray-900">Instructions</h3>
+              <div className="space-y-2 text-sm text-gray-600">
                 <p>1. Select period and date</p>
                 <p>2. Start the camera</p>
                 <p>3. Click "Start Scanning" to detect faces</p>

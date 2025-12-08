@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, Users, Clock, Check, Filter, Download } from "lucide-react";
 import { mockAPI, Student } from "../utils/mockData";
 import { useToast } from "../hooks/useToast";
+import govEmblem from "../assets/government-emblem.svg";
 
 interface AttendanceModal {
   student: Student;
@@ -145,32 +146,35 @@ const ManualAttendance = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
+      <header className="bg-primary text-primary-foreground shadow-md sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4 mb-4">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
               aria-label="Go back"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <h1 className="text-xl font-semibold">Manual Attendance</h1>
-              <p className="text-sm text-muted-foreground">Search and mark student attendance</p>
+            <div className="flex items-center space-x-3">
+              <img src={govEmblem} alt="Government Emblem" className="w-10 h-10" />
+              <div>
+                <h1 className="text-xl font-semibold">Manual Attendance Entry</h1>
+                <p className="text-sm opacity-90">Upastithi - Government Attendance System</p>
+              </div>
             </div>
           </div>
 
           {/* Search and Filters */}
           <div className="space-y-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search by name or roll number..."
-                className="input-field pl-10 w-full"
+                className="bg-white border border-gray-300 rounded-lg py-3 px-4 pl-10 w-full text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -178,7 +182,7 @@ const ManualAttendance = () => {
 
             <div className="flex flex-wrap gap-4">
               <select
-                className="input-field min-w-[120px]"
+                className="bg-white border border-gray-300 rounded-lg py-3 px-4 min-w-[120px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 value={classFilter}
                 onChange={(e) => setClassFilter(e.target.value)}
               >
@@ -190,7 +194,7 @@ const ManualAttendance = () => {
               </select>
 
               <select
-                className="input-field min-w-[120px]"
+                className="bg-white border border-gray-300 rounded-lg py-3 px-4 min-w-[120px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 value={sectionFilter}
                 onChange={(e) => setSectionFilter(e.target.value)}
               >
@@ -208,7 +212,7 @@ const ManualAttendance = () => {
       <main className="container mx-auto px-4 py-6">
         {/* Bulk Actions */}
         {selectedStudents.size > 0 && (
-          <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mb-6 animate-fade-in">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6 animate-fade-in">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-primary" />
@@ -261,20 +265,20 @@ const ManualAttendance = () => {
         )}
 
         {/* Students List */}
-        <div className="bg-card rounded-lg border border-border shadow-sm">
-          <div className="p-4 border-b border-border">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-lg">
+          <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">
+              <h2 className="text-xl font-semibold text-gray-900">
                 Students ({filteredStudents.length})
               </h2>
-              <button className="btn-secondary">
+              <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors border border-gray-300">
                 <Download className="w-4 h-4 mr-2" />
                 Export CSV
               </button>
             </div>
           </div>
 
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-gray-200">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 Loading students...

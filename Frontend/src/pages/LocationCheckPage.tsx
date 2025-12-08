@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
 
-const INSTITUTION_LAT = 20.24622816833521; 
-const INSTITUTION_LNG = 85.80207880923501; 
-const ALLOWED_DISTANCE_METERS = 500;
+const INSTITUTION_LAT = 20.246894911026796;
+const INSTITUTION_LNG = 85.80228785100186;
+const ALLOWED_DISTANCE_METERS = 1000;
 
 // Haversine formula to calculate distance between two lat/lng points
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {

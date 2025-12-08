@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { LogIn, Camera, ArrowLeft } from "lucide-react";
+import govEmblem from "../assets/government-emblem.svg";
 
 const Selection = () => {
   const navigate = useNavigate();
@@ -7,38 +8,41 @@ const Selection = () => {
   const options = [
     {
       id: "login",
-      title: "Login",
-      description: "Access your dashboard based on your role",
+      title: "System Login",
+      description: "Access your dashboard with secure authentication",
       icon: LogIn,
-      color: "bg-gradient-to-br from-primary/20 to-primary/10 border-primary/30",
+      color: "bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200",
       action: () => navigate("/login")
     },
     {
       id: "camera",
-      title: "Camera Attendance",
-      description: "Use face recognition for quick attendance marking",
+      title: "Face Recognition Attendance",
+      description: "Quick attendance marking using advanced AI technology",
       icon: Camera,
-      color: "bg-gradient-to-br from-warning/20 to-warning/10 border-warning/30",
+      color: "bg-gradient-to-br from-green-50 to-green-100 border-green-200",
       action: () => navigate("/camera-attendance")
     }
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
+      <header className="bg-primary text-primary-foreground shadow-md">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
               aria-label="Go back"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <h1 className="text-xl font-semibold">Choose Access Method</h1>
-              <p className="text-sm text-muted-foreground">Select how you want to access Smart Attend</p>
+            <div className="flex items-center space-x-3">
+              <img src={govEmblem} alt="Government Emblem" className="w-10 h-10" />
+              <div>
+                <h1 className="text-xl font-semibold">Upastithi Access Portal</h1>
+                <p className="text-sm opacity-90">Choose your preferred access method</p>
+              </div>
             </div>
           </div>
         </div>
@@ -58,16 +62,16 @@ const Selection = () => {
               >
                 <div className="flex items-center gap-6">
                   <div className="flex-shrink-0">
-                    <div className="w-16 h-16 bg-card rounded-xl flex items-center justify-center shadow-md">
+                    <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center shadow-md">
                       <IconComponent className="w-8 h-8 text-primary" />
                     </div>
                   </div>
                   
                   <div className="flex-1">
-                    <h2 className="text-2xl font-semibold text-foreground mb-2">
+                    <h2 className="text-2xl font-semibold text-gray-900 mb-2">
                       {option.title}
                     </h2>
-                    <p className="text-muted-foreground text-lg">
+                    <p className="text-gray-600 text-lg">
                       {option.description}
                     </p>
                   </div>
@@ -82,24 +86,24 @@ const Selection = () => {
         </div>
 
         {/* Quick Stats */}
-        <div className="mt-12 bg-card rounded-2xl p-6 border border-border">
-          <h3 className="text-lg font-semibold mb-4">System Status</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="mt-12 bg-white rounded-2xl p-8 shadow-lg border border-gray-200">
+          <h3 className="text-2xl font-semibold mb-6 text-gray-900">System Overview</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">1,234</div>
-              <div className="text-sm text-muted-foreground">Students</div>
+              <div className="text-3xl font-bold text-primary mb-2">2,500+</div>
+              <div className="text-sm text-gray-600">Active Users</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-accent">89</div>
-              <div className="text-sm text-muted-foreground">Teachers</div>
+              <div className="text-3xl font-bold text-green-600 mb-2">150+</div>
+              <div className="text-sm text-gray-600">Institutions</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-warning">12</div>
-              <div className="text-sm text-muted-foreground">Schools</div>
+              <div className="text-3xl font-bold text-orange-600 mb-2">25+</div>
+              <div className="text-sm text-gray-600">Districts</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-success">94%</div>
-              <div className="text-sm text-muted-foreground">Attendance</div>
+              <div className="text-3xl font-bold text-purple-600 mb-2">98%</div>
+              <div className="text-sm text-gray-600">Accuracy</div>
             </div>
           </div>
         </div>

@@ -1,33 +1,36 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Smart Attend - Rural School Attendance System</title>
-    <meta name="description" content="Digital attendance solution for rural schools with offline support and multi-role access" />
-    <meta name="author" content="Smart Attend Team" />
-
-    <meta property="og:title" content="Smart Attend - Rural School Attendance System" />
-    <meta property="og:description" content="Digital attendance solution for rural schools with offline support and multi-role access" />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="/assets/og-image.png" />
-
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Smart Attend" />
-    <meta name="twitter:description" content="Digital attendance solution for rural schools" />
-    <meta name="twitter:image" content="/assets/og-image.png" />
-
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#1E90FF" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>UpastithiCheck - Smart Attendance Management by REX</title>
+    <meta name="description" content="AI-powered attendance management system with face recognition">
+    <meta name="theme-color" content="#3b82f6">
+    <link rel="apple-touch-icon" href="/favicon.ico">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
   </head>
-
   <body>
     <div id="root"></div>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+      import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+
+      const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID",
+        measurementId: "YOUR_MEASUREMENT_ID"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      try { getAnalytics(app); } catch (_) { /* Analytics optional on localhost */ }
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

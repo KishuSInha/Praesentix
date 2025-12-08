@@ -1,17 +1,17 @@
-# Smart Attend - Rural School Attendance System
+# Upastithi - Government Attendance Management System
 
-A comprehensive digital attendance solution designed specifically for rural schools with offline support, multi-role access, and low-bandwidth optimization.
+An advanced digital attendance management system developed by REX Technologies for government institutions, featuring AI-powered face recognition, comprehensive analytics, and secure multi-role access.
 
 ## 🚀 Features
 
-- **Multi-Role Dashboard**: Student, Teacher, Admin, and Education Department views
-- **Attendance Methods**: Manual entry and camera-based face recognition
-- **Offline Support**: PWA with service worker for offline functionality  
-- **Mobile-First Design**: Optimized for smartphones and tablets
-- **Dark Theme**: High contrast design for better visibility
-- **Mock/Real API Toggle**: Easy switching between demo and production data
-- **Export Capabilities**: CSV downloads and print-ready reports
-- **Dropout Analytics**: Automated calculation and tracking
+- **Government-Grade Security**: Role-based access control with secure authentication
+- **AI-Powered Recognition**: Advanced facial recognition with anti-spoofing technology
+- **Multi-Institution Support**: Centralized management across multiple government institutions
+- **Real-time Analytics**: Comprehensive reporting and dashboard analytics
+- **Professional Design**: Clean, government website-compliant interface
+- **Scalable Architecture**: Built to handle large-scale government deployments
+- **Compliance Ready**: Meets government data protection and privacy standards
+- **24/7 Support**: Enterprise-level support by REX Technologies
 
 ## 🏗️ Architecture
 
@@ -90,12 +90,12 @@ The system includes comprehensive mock data for:
 ## 🎨 Design System
 
 ### Color Scheme
-- **Background**: Pure black (#000000)
-- **Text**: White (#ffffff)  
-- **Primary**: Education blue (#1E90FF)
-- **Success**: Green (#22c55e)
-- **Warning**: Amber (#f59e0b)
-- **Error**: Red (#ef4444)
+- **Background**: Clean white (#FFFFFF)
+- **Text**: Professional dark gray (#1F2937)  
+- **Primary**: Government blue (#1E40AF)
+- **Success**: Green (#059669)
+- **Warning**: Amber (#D97706)
+- **Error**: Red (#DC2626)
 
 ### Role-Based Colors
 - **Student**: Cyan (#00bcd4)
@@ -165,13 +165,6 @@ src/
 - `public/sw.js` - Service Worker for PWA
 - `public/manifest.json` - PWA configuration
 
-## 🚀 Deployment
-
-### Lovable Platform
-1. Click "Publish" in the Lovable editor
-2. Your app will be deployed automatically
-3. Custom domains available with paid plans
-
 ### Manual Deployment
 Works with any static hosting:
 - Netlify
@@ -193,4 +186,6 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Smart Attend** - Empowering rural education through technology 🎓
+**Upastithi** - Developed by REX Technologies for Government of India 🇮🇳
+
+*Secure • Reliable • Government Approved*

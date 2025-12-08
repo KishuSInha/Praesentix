@@ -113,7 +113,7 @@ def clear_all_attendance():
                 print("❌ Basic attendance clearing cancelled")
         else:
             print("✅ Basic attendance database is already empty")
-        
+    
         conn.close()
         
     except Exception as e:

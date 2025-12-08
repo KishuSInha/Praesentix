@@ -7,6 +7,7 @@ from flask_cors import CORS
 import face_recognition
 from deepface import DeepFace
 import DataBase_attendance as db
+import period_attendance as period_db
 from datetime import datetime
 import csv
 import sqlite3
@@ -20,10 +21,10 @@ import time
 app = Flask(__name__)
 # Configure CORS to allow requests from the frontend
 CORS(app, resources={r"/api/*": {
-    "origins": ["http://localhost:8080", "http://localhost:5000", "http://127.0.0.1:5000", "http://127.0.0.1:5001", "http://localhost:8081", "http://localhost:3000"],
+    "origins": ["*"],
     "methods": ["GET", "POST", "OPTIONS", "PUT", "DELETE"],
     "allow_headers": ["Content-Type", "Origin", "Accept", "Authorization"],
-    "supports_credentials": True
+    "supports_credentials": False
 }})# Database folder configuration - use root level Database folder
 DATABASE_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Database')
 if not os.path.exists(DATABASE_FOLDER):
@@ -33,7 +34,7 @@ else:
     print(f"✅ Using existing database folder at: {DATABASE_FOLDER}")
 
 # Directory to store known faces
-KNOWN_FACES_DIR = "/Users/utkarshsinha/Documents/Final Model/Backend/known_faces"
+KNOWN_FACES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'known_faces')
 
 # Global variables for known faces and encodings
 known_face_encodings = []
@@ -345,38 +346,97 @@ def detect_emotion_realtime(landmarks):
         print(f"Error in emotion detection: {str(e)}")
         return "Neutral"
 
-def detect_liveness(frame, face_landmarks):
-    """Simple liveness detection based on texture and depth analysis."""
+def detect_liveness(frame, face_landmarks=None):
+    """Enhanced liveness detection with multiple checks."""
     try:
-        # Texture analysis
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape
+        
+        # 1. Texture Analysis (Laplacian variance)
         laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
         
-        # Depth analysis using Z-coordinates
+        # 2. Color diversity check (photos/screens have less color variation)
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        color_std = np.std(hsv[:, :, 1])  # Saturation channel
+        
+        # 3. Edge density (real faces have more natural edges)
+        edges = cv2.Canny(gray, 50, 150)
+        edge_density = np.sum(edges > 0) / (h * w)
+        
+        # 4. Frequency analysis (detect screen patterns)
+        dft = cv2.dft(np.float32(gray), flags=cv2.DFT_COMPLEX_OUTPUT)
+        dft_shift = np.fft.fftshift(dft)
+        magnitude = cv2.magnitude(dft_shift[:,:,0], dft_shift[:,:,1])
+        freq_score = np.mean(magnitude[h//4:3*h//4, w//4:3*w//4])
+        
+        # 5. Depth analysis using Z-coordinates (if available)
+        z_variance = 0
+        z_range = 0
         if face_landmarks:
             z_coords = [landmark.z for landmark in face_landmarks.landmark]
             z_variance = np.var(z_coords)
             z_range = max(z_coords) - min(z_coords)
+        
+        # Scoring system (more lenient for real faces)
+        liveness_score = 0.0
+        
+        # Texture score (0-30 points) - Real faces have texture
+        if laplacian_var > 300:
+            liveness_score += 30
+        elif laplacian_var > 150:
+            liveness_score += 25
+        elif laplacian_var > 80:
+            liveness_score += 20
         else:
-            z_variance = 0
-            z_range = 0
+            liveness_score += max(0, laplacian_var / 5)
         
-        # Simple scoring
-        liveness_score = 50.0
+        # Color diversity score (0-25 points) - Real faces have color variation
+        if color_std > 20:
+            liveness_score += 25
+        elif color_std > 10:
+            liveness_score += 20
+        else:
+            liveness_score += max(0, color_std * 1.5)
         
-        if laplacian_var > 100:  # Good texture
+        # Edge density score (0-20 points) - Real faces have natural edges
+        if 0.03 < edge_density < 0.35:
             liveness_score += 20
-        if z_variance > 0.0005:  # Good depth variation
-            liveness_score += 20
-        if z_range > 0.02:  # Good depth range
+        elif 0.02 < edge_density < 0.4:
+            liveness_score += 15
+        else:
             liveness_score += 10
         
-        is_live = liveness_score > 70
+        # Frequency score (0-15 points) - Lower frequency = more natural
+        if freq_score < 80:
+            liveness_score += 15
+        elif freq_score < 150:
+            liveness_score += 10
+        else:
+            liveness_score += max(0, 15 - (freq_score - 150) / 30)
+        
+        # Depth score (0-10 points) - Optional, helps if available
+        if z_variance > 0.0008:
+            liveness_score += 7
+        elif z_variance > 0.0003:
+            liveness_score += 5
+        
+        if z_range > 0.025:
+            liveness_score += 3
+        elif z_range > 0.015:
+            liveness_score += 2
+        
+        # Determine if live (threshold: 55/100 - more lenient)
+        is_live = liveness_score >= 55
+        
+        # Debug logging
+        print(f"Liveness Analysis: Texture={laplacian_var:.1f}, Color={color_std:.1f}, "
+              f"Edge={edge_density:.3f}, Freq={freq_score:.1f}, Score={liveness_score:.1f}, Live={is_live}")
+        
         return is_live, min(99.0, liveness_score)
         
     except Exception as e:
         print(f"Error in liveness detection: {str(e)}")
-        return True, 75.0
+        return False, 40.0
 
 def mark_enhanced_attendance(name, student_id, emotion, liveness_confidence, recognition_confidence, is_live):
     """Mark attendance in enhanced database."""
@@ -511,31 +571,43 @@ def save_attendance_to_db(roll_number):
 @app.route('/api/recognize', methods=['POST'])
 def recognize_face():
     """
-    Receives an image via POST request, performs face recognition, and returns results.
+    Optimized for multi-person recognition (50-60 people) with enhanced spoofing detection.
     """
     data = request.get_json()
     img_data = data.get('image', None)
+    period = data.get('period', '')
+    attendance_date = data.get('date', datetime.now().strftime("%Y-%m-%d"))
 
     if not img_data:
         return jsonify({"success": False, "message": "No image data provided."}), 400
     
-    # FIX: The frontend now sends the raw base64 string without the header.
-    # The split(',') is no longer needed to remove the header.
     try:
         img_bytes = base64.b64decode(img_data)
         np_arr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
     except Exception as e:
         return jsonify({"success": False, "message": f"Invalid image data: {str(e)}"}), 400
 
     if img is None:
         return jsonify({"success": False, "message": "Could not decode image."}), 400
 
+    # Resize for faster processing if image is too large
+    max_dimension = 1920
+    h, w = img.shape[:2]
+    if max(h, w) > max_dimension:
+        scale = max_dimension / max(h, w)
+        img = cv2.resize(img, (int(w * scale), int(h * scale)))
+    
     rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
-    face_locations = face_recognition.face_locations(rgb_img)
-    face_encodings = face_recognition.face_encodings(rgb_img, face_locations)
+    # Use faster face detection model for multiple faces
+    face_locations = face_recognition.face_locations(rgb_img, model='hog', number_of_times_to_upsample=1)
+    
+    # Limit to 60 faces for performance
+    if len(face_locations) > 60:
+        face_locations = face_locations[:60]
+    
+    face_encodings = face_recognition.face_encodings(rgb_img, face_locations, num_jitters=1)
 
     recognized_faces = []
 
@@ -556,7 +628,7 @@ def recognize_face():
                     roll_number = known_face_roll_numbers[best_match_index]
                     recognition_confidence = (1.0 - face_distances[best_match_index]) * 100
                 
-        # Spoofing and Emotion Detection (requires a face)
+        # Enhanced Spoofing Detection and Emotion Analysis
         spoofed = False
         emotion = "Neutral"
         liveness_confidence = 75.0
@@ -564,33 +636,32 @@ def recognize_face():
 
         try:
             face_img = img[top:bottom, left:right]
-            if face_img.size > 0:
-                # Emotion analysis
-                demography = DeepFace.analyze(face_img, actions=['emotion'], enforce_detection=False)
-                if demography and 'emotion' in demography[0]:
-                    emotion = max(demography[0]['emotion'], key=demography[0]['emotion'].get)
+            if face_img.size > 0 and face_img.shape[0] > 20 and face_img.shape[1] > 20:
+                # Enhanced liveness detection
+                is_live, liveness_confidence = detect_liveness(face_img)
+                spoofed = not is_live
                 
-                # Simple liveness detection (texture analysis)
-                try:
-                    face_gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
-                    laplacian_var = cv2.Laplacian(face_gray, cv2.CV_64F).var()
-                    
-                    if laplacian_var > 100:
-                        liveness_confidence = min(95.0, 75.0 + (laplacian_var - 100) / 10)
-                        is_live = True
-                    else:
-                        liveness_confidence = max(30.0, laplacian_var / 2)
-                        if liveness_confidence < 50:
-                            is_live = False
-                            spoofed = True
-                except Exception as liveness_error:
-                    print(f"Liveness detection failed: {liveness_error}")
+                # Emotion analysis (only for live faces to save processing time)
+                if is_live:
+                    try:
+                        demography = DeepFace.analyze(face_img, actions=['emotion'], enforce_detection=False, silent=True)
+                        if demography and 'emotion' in demography[0]:
+                            emotion = max(demography[0]['emotion'], key=demography[0]['emotion'].get)
+                    except:
+                        emotion = "Neutral"
+            else:
+                is_live = False
+                spoofed = True
+                liveness_confidence = 20.0
             
         except Exception as e:
-            print(f"DeepFace analysis failed: {e}")
+            print(f"Analysis failed: {e}")
+            is_live = False
+            spoofed = True
+            liveness_confidence = 30.0
         
-        # Mark attendance if face is recognized (lower threshold for testing)
-        if name != "Unknown" and roll_number != "N/A" and recognition_confidence > 50.0:
+        # Mark attendance only for live faces with good confidence
+        if name != "Unknown" and roll_number != "N/A" and recognition_confidence > 50.0 and is_live:
             print(f"✅ Face recognized: {name} (ID: {roll_number}) with confidence: {recognition_confidence:.1f}%")
             
             # First, ensure the student exists in the database
@@ -634,11 +705,24 @@ def recognize_face():
                 print(f"Error marking enhanced attendance: {e}")
                 enhanced_attendance_marked = False
             
-            attendance_marked = basic_attendance_marked or enhanced_attendance_marked
+            # Mark in period-based database if period is provided
+            period_attendance_marked = False
+            if period:
+                try:
+                    period_success, period_message = period_db.mark_period_attendance(
+                        roll_number, name, attendance_date, period, emotion, 
+                        liveness_confidence, recognition_confidence, is_live
+                    )
+                    period_attendance_marked = period_success
+                    print(f"Period attendance marked: {period_attendance_marked} - {period_message}")
+                except Exception as e:
+                    print(f"Error marking period attendance: {e}")
+            
+            attendance_marked = basic_attendance_marked or enhanced_attendance_marked or period_attendance_marked
             print(f"📊 Final attendance status: {attendance_marked}")
             
-            # Return success even if only enhanced attendance was marked
-            if enhanced_attendance_marked and not basic_attendance_marked:
+            # Return success if any attendance was marked
+            if (enhanced_attendance_marked or period_attendance_marked) and not basic_attendance_marked:
                 attendance_marked = True
         else:
             print(f"❌ Attendance not marked - Name: {name}, Roll: {roll_number}, Confidence: {recognition_confidence:.1f}%")
@@ -664,13 +748,13 @@ def recognize_face():
         recognized_faces.append({
             "name": name,
             "rollNumber": roll_number,
-            "spoofed": spoofed,
+            "spoofed": bool(spoofed),
             "emotion": emotion,
-            "recognitionConfidence": round(recognition_confidence, 1),
-            "livenessConfidence": round(liveness_confidence, 1),
-            "isLive": is_live,
-            "attendanceMarked": attendance_marked,
-            "attendanceAlreadyMarked": attendance_already_marked
+            "recognitionConfidence": round(float(recognition_confidence), 1),
+            "livenessConfidence": round(float(liveness_confidence), 1),
+            "isLive": bool(is_live),
+            "attendanceMarked": bool(attendance_marked),
+            "attendanceAlreadyMarked": bool(attendance_already_marked)
         })
     
     if not recognized_faces:
@@ -983,7 +1067,7 @@ def enroll_face():
 @app.route('/api/enhanced-recognize', methods=['POST'])
 def enhanced_recognize():
     """
-    Enhanced face recognition with emotion detection and liveness check
+    Enhanced face recognition optimized for 50-60 people with advanced spoofing detection
     """
     try:
         data = request.get_json()
@@ -1003,12 +1087,24 @@ def enhanced_recognize():
         if img is None:
             return jsonify({"success": False, "message": "Could not decode image."}), 400
         
+        # Resize for faster processing
+        max_dimension = 1920
+        h, w = img.shape[:2]
+        if max(h, w) > max_dimension:
+            scale = max_dimension / max(h, w)
+            img = cv2.resize(img, (int(w * scale), int(h * scale)))
+        
         # Convert to RGB for face recognition
         rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         
-        # Standard face recognition
-        face_locations = face_recognition.face_locations(rgb_img)
-        face_encodings = face_recognition.face_encodings(rgb_img, face_locations)
+        # Optimized face detection for multiple people
+        face_locations = face_recognition.face_locations(rgb_img, model='hog', number_of_times_to_upsample=1)
+        
+        # Limit to 60 faces
+        if len(face_locations) > 60:
+            face_locations = face_locations[:60]
+        
+        face_encodings = face_recognition.face_encodings(rgb_img, face_locations, num_jitters=1)
         
         if not face_encodings:
             return jsonify({
@@ -1036,36 +1132,36 @@ def enhanced_recognize():
                         roll_number = known_face_roll_numbers[best_match_index]
                         recognition_confidence = (1.0 - face_distances[best_match_index]) * 100
             
-            # Emotion detection using DeepFace
-            emotion = "Neutral"
-            try:
-                face_img = img[top:bottom, left:right]
-                if face_img.size > 0:
-                    demography = DeepFace.analyze(face_img, actions=['emotion'], enforce_detection=False)
-                    if demography and 'emotion' in demography[0]:
-                        emotion = max(demography[0]['emotion'], key=demography[0]['emotion'].get)
-            except Exception as e:
-                print(f"DeepFace emotion analysis failed: {e}")
-            
-            # Simple liveness detection (texture analysis)
+            # Enhanced liveness detection
             is_live = True
             liveness_confidence = 75.0
-            try:
-                face_gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
-                laplacian_var = cv2.Laplacian(face_gray, cv2.CV_64F).var()
-                
-                if laplacian_var > 100:
-                    liveness_confidence = min(95.0, 75.0 + (laplacian_var - 100) / 10)
-                else:
-                    liveness_confidence = max(30.0, laplacian_var / 2)
-                    if liveness_confidence < 50:
-                        is_live = False
-            except Exception as e:
-                print(f"Liveness detection failed: {e}")
+            emotion = "Neutral"
             
-            # Mark attendance if recognized with high confidence
+            try:
+                face_img = img[top:bottom, left:right]
+                if face_img.size > 0 and face_img.shape[0] > 20 and face_img.shape[1] > 20:
+                    # Enhanced spoofing detection
+                    is_live, liveness_confidence = detect_liveness(face_img)
+                    
+                    # Emotion detection only for live faces
+                    if is_live:
+                        try:
+                            demography = DeepFace.analyze(face_img, actions=['emotion'], enforce_detection=False, silent=True)
+                            if demography and 'emotion' in demography[0]:
+                                emotion = max(demography[0]['emotion'], key=demography[0]['emotion'].get)
+                        except:
+                            emotion = "Neutral"
+                else:
+                    is_live = False
+                    liveness_confidence = 20.0
+            except Exception as e:
+                print(f"Analysis failed: {e}")
+                is_live = False
+                liveness_confidence = 30.0
+            
+            # Mark attendance only for live faces with high confidence
             attendance_marked = False
-            if name != "Unknown" and recognition_confidence > 85.0:
+            if name != "Unknown" and recognition_confidence > 85.0 and is_live:
                 attendance_marked = mark_enhanced_attendance(
                     name, roll_number, emotion, liveness_confidence, recognition_confidence, is_live
                 )
@@ -1078,11 +1174,11 @@ def enhanced_recognize():
                 "name": name,
                 "rollNumber": roll_number,
                 "emotion": emotion,
-                "recognitionConfidence": round(recognition_confidence, 1),
-                "livenessConfidence": round(liveness_confidence, 1),
-                "isLive": is_live,
-                "spoofed": not is_live,
-                "attendanceMarked": attendance_marked
+                "recognitionConfidence": round(float(recognition_confidence), 1),
+                "livenessConfidence": round(float(liveness_confidence), 1),
+                "isLive": bool(is_live),
+                "spoofed": bool(not is_live),
+                "attendanceMarked": bool(attendance_marked)
             })
         
         return jsonify({
@@ -1426,6 +1522,117 @@ def populate_face_database():
             "success": False,
             "message": f"Failed to populate face database: {str(e)}"
         }), 500
+
+# Period-based attendance endpoints
+@app.route('/api/period-attendance', methods=['GET'])
+def get_period_attendance():
+    """
+    Get period-based attendance records
+    """
+    try:
+        date_str = request.args.get('date')
+        period = request.args.get('period')
+        
+        records = period_db.get_period_attendance(date_str, period)
+        
+        attendance_records = []
+        for record in records:
+            attendance_records.append({
+                "id": record[0],
+                "studentId": record[1],
+                "name": record[2],
+                "date": record[3],
+                "period": record[4],
+                "time": record[5],
+                "emotion": record[6],
+                "spoofingStatus": record[7],
+                "livenessConfidence": record[8],
+                "recognitionConfidence": record[9],
+                "timestamp": record[10]
+            })
+        
+        return jsonify({
+            "success": True,
+            "data": attendance_records,
+            "total": len(attendance_records)
+        })
+        
+    except Exception as e:
+        print(f"Error getting period attendance: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"Failed to get period attendance: {str(e)}"
+        }), 500
+
+@app.route('/api/period-attendance/summary', methods=['GET'])
+def get_period_attendance_summary():
+    """
+    Get attendance summary by period
+    """
+    try:
+        date_str = request.args.get('date')
+        
+        records = period_db.get_attendance_summary(date_str)
+        
+        summary = []
+        for record in records:
+            summary.append({
+                "period": record[0],
+                "totalPresent": record[1],
+                "liveCount": record[2],
+                "spoofedCount": record[3]
+            })
+        
+        return jsonify({
+            "success": True,
+            "data": summary
+        })
+        
+    except Exception as e:
+        print(f"Error getting attendance summary: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"Failed to get attendance summary: {str(e)}"
+        }), 500
+
+@app.route('/api/period-attendance/export', methods=['GET'])
+def export_period_attendance():
+    """
+    Export period attendance to CSV
+    """
+    try:
+        date_str = request.args.get('date')
+        period = request.args.get('period')
+        
+        csv_content = period_db.export_period_attendance_csv(date_str, period)
+        
+        if csv_content is None:
+            return jsonify({
+                "success": False,
+                "message": "Failed to generate CSV"
+            }), 500
+        
+        # Generate filename
+        filename_parts = ["period_attendance"]
+        if date_str:
+            filename_parts.append(date_str)
+        if period:
+            filename_parts.append(period.replace(" ", "_").replace("(", "").replace(")", ""))
+        filename = "_".join(filename_parts) + ".csv"
+        
+        from flask import Response
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
+        
+    except Exception as e:
+        print(f"Error exporting period attendance: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"Failed to export attendance: {str(e)}"
+        }), 500
         
 if __name__ == '__main__':
     print("🚀 Starting Smart Attend Face Recognition Attendance System Backend...")
@@ -1453,6 +1660,13 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"❌ Error initializing enhanced attendance database: {e}")
     
+    try:
+        print("📊 Initializing period attendance database...")
+        period_db.setup_period_attendance_database()
+        print("✅ Period attendance database initialized")
+    except Exception as e:
+        print(f"❌ Error initializing period attendance database: {e}")
+    
     # Load known faces
     try:
         print("👥 Loading known faces...")
@@ -1462,14 +1676,19 @@ if __name__ == '__main__':
     
     print("\n🌟 Enhanced Face Recognition Attendance System Backend Started")
     print("📡 Available endpoints:")
-    print("- /api/recognize (POST) - Standard face recognition with enhanced attendance")
+    print("- /api/recognize (POST) - Standard face recognition with period support")
     print("- /api/enroll-face (POST) - Enroll new student face")
     print("- /api/enhanced-recognize (POST) - Enhanced face recognition with emotion & liveness")
     print("- /api/enhanced-attendance (GET) - Get enhanced attendance records")
+    print("- /api/period-attendance (GET) - Get period-based attendance records")
+    print("- /api/period-attendance/summary (GET) - Get attendance summary by period")
+    print("- /api/period-attendance/export (GET) - Export period attendance to CSV")
     print("- /api/enrolled-faces (GET) - Get list of enrolled faces")
     print("- /api/test-db (GET) - Test database connections")
     print(f"\n🔗 Server running at: http://localhost:5001")
     print("🧪 Test database status at: http://localhost:5001/api/test-db")
+    print("📊 Period attendance management: http://localhost:5001/api/period-attendance")
+    print("📥 CSV export: http://localhost:5001/api/period-attendance/export")
     
     # You can change host and port as needed for deployment
     app.run(host='0.0.0.0', port=5001, debug=True)

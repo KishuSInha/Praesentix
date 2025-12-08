@@ -8,70 +8,70 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Core Dark Theme Colors */
-    --background: 0 0% 0%;
-    --foreground: 0 0% 100%;
+    /* Core Light Theme Colors */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 15%;
 
     /* Card Colors */
-    --card: 0 0% 5%;
-    --card-foreground: 0 0% 100%;
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 15%;
 
     /* Popover Colors */
-    --popover: 0 0% 8%;
-    --popover-foreground: 0 0% 100%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 15%;
 
-    /* Primary - Education Blue */
-    --primary: 207 100% 59%;
+    /* Primary - Government Blue */
+    --primary: 220 100% 45%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Dark Gray */
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 100%;
+    /* Secondary - Light Gray */
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 15%;
 
     /* Muted - Subtle Gray */
-    --muted: 0 0% 10%;
-    --muted-foreground: 0 0% 70%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
 
     /* Accent - Success Green */
-    --accent: 142 76% 47%;
+    --accent: 142 76% 36%;
     --accent-foreground: 0 0% 100%;
 
     /* Destructive - Error Red */
-    --destructive: 0 84% 60%;
+    --destructive: 0 84% 50%;
     --destructive-foreground: 0 0% 100%;
 
     /* Borders and Inputs */
-    --border: 0 0% 20%;
-    --input: 0 0% 15%;
-    --ring: 207 100% 59%;
+    --border: 0 0% 85%;
+    --input: 0 0% 98%;
+    --ring: 220 100% 45%;
 
     /* Border Radius */
     --radius: 0.75rem;
 
     /* Warning Color */
-    --warning: 45 100% 51%;
-    --warning-foreground: 0 0% 0%;
+    --warning: 45 100% 45%;
+    --warning-foreground: 0 0% 100%;
 
     /* Success Color */
-    --success: 142 76% 47%;
+    --success: 142 76% 36%;
     --success-foreground: 0 0% 100%;
 
-    /* Education System Specific Colors */
-    --student: 195 100% 50%;
-    --teacher: 270 100% 70%;
-    --admin: 30 100% 50%;
-    --education: 300 100% 60%;
+    /* Government System Specific Colors */
+    --student: 195 100% 40%;
+    --teacher: 270 100% 50%;
+    --admin: 30 100% 40%;
+    --education: 300 100% 45%;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(207 100% 59%), hsl(207 100% 45%));
-    --gradient-dark: linear-gradient(135deg, hsl(0 0% 8%), hsl(0 0% 5%));
-    --gradient-card: linear-gradient(135deg, hsl(0 0% 5%), hsl(0 0% 8%));
+    --gradient-primary: linear-gradient(135deg, hsl(220 100% 45%), hsl(220 100% 35%));
+    --gradient-light: linear-gradient(135deg, hsl(0 0% 98%), hsl(0 0% 95%));
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 98%), hsl(0 0% 96%));
 
     /* Shadows */
-    --shadow-sm: 0 2px 4px hsl(0 0% 0% / 0.3);
-    --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.4);
-    --shadow-lg: 0 8px 24px hsl(0 0% 0% / 0.5);
-    --shadow-glow: 0 0 20px hsl(207 100% 59% / 0.3);
+    --shadow-sm: 0 2px 4px hsl(0 0% 0% / 0.1);
+    --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.15);
+    --shadow-lg: 0 8px 24px hsl(0 0% 0% / 0.2);
+    --shadow-glow: 0 0 20px hsl(220 100% 45% / 0.2);
 
     /* Animations */
     --transition-fast: all 0.15s ease-out;
