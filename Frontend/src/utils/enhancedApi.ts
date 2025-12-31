@@ -1,4 +1,6 @@
-const ENHANCED_API_BASE = 'http://localhost:5002/api';
+const API_URL = import.meta.env.VITE_API_URL;
+console.log("API URL:", API_URL);
+const ENHANCED_API_BASE = `${API_URL}/api`;
 
 export const enhancedApi = {
   // Get student attendance data

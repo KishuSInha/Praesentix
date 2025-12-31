@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 
-const API_BASE_URL = 'http://localhost:5002';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
   const { t } = useTranslation();
@@ -27,24 +27,24 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
   // The logic for dataURLtoBlob, startCamera, stopCamera, captureImage,
   // and handleSubmit remains the same as the refined version.
   // We'll just show the JSX with the t() function implemented.
-  
+
   // ... (insert all the functions from the previous correct answer here)
   const dataURLtoBlob = (dataUrl: string): Blob => {
     try {
       // Remove data URL prefix if present
       const base64String = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-      
+
       // Decode base64 string
       const byteString = atob(base64String);
-      
+
       // Create array buffer
       const arrayBuffer = new ArrayBuffer(byteString.length);
       const uint8Array = new Uint8Array(arrayBuffer);
-      
+
       for (let i = 0; i < byteString.length; i++) {
         uint8Array[i] = byteString.charCodeAt(i);
       }
-      
+
       // Return blob with JPEG mime type
       return new Blob([uint8Array], { type: 'image/jpeg' });
     } catch (error) {
@@ -62,7 +62,7 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
           facingMode: 'user'
         }
       });
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
@@ -94,24 +94,24 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
 
   const captureImage = () => {
     if (!videoRef.current || !canvasRef.current) return;
-    
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
-    
+
     if (!context) return;
-    
+
     // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    
+
     // Draw the current video frame to canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
+
     // Convert canvas to data URL and add to captured images
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
     setCapturedImages(prev => [...prev, imageDataUrl]);
-    
+
     // Show success toast
     toast({
       title: 'Image Captured',
@@ -121,7 +121,7 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (capturedImages.length < 3) {
       toast({
         title: 'More Images Needed',
@@ -130,7 +130,7 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
       });
       return;
     }
-    
+
     if (!studentName || !studentId) {
       toast({
         title: 'Missing Information',
@@ -139,17 +139,17 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
       });
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     try {
       console.log('Starting enrollment for:', studentName, studentId);
       console.log('Number of images:', capturedImages.length);
-      
+
       const formData = new FormData();
       formData.append('studentName', studentName);
       formData.append('studentId', studentId);
-      
+
       // Add all captured images
       capturedImages.forEach((img, index) => {
         try {
@@ -161,36 +161,36 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
           throw new Error(`Failed to process image ${index + 1}`);
         }
       });
-      
+
       console.log('Sending enrollment request to:', `${API_BASE_URL}/api/enroll-face`);
-      
+
       const response = await fetch(`${API_BASE_URL}/api/enroll-face`, {
         method: 'POST',
         body: formData,
       });
-      
+
       console.log('Response status:', response.status);
-      
+
       const result = await response.json();
       console.log('Response data:', result);
-      
+
       if (!response.ok || !result.success) {
         throw new Error(result.message || 'Failed to enroll student');
       }
-      
+
       // Success
       toast({
         title: 'Enrollment Successful',
         description: result.message || `${studentName} enrolled successfully!`,
       });
-      
+
       // Reset form
       setStudentName('');
       setStudentId('');
       setCapturedImages([]);
       stopCamera();
       setIsEnrolling(false);
-      
+
     } catch (error: any) {
       console.error('Error enrolling student:', error);
       toast({
@@ -211,13 +211,13 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
     setIsEnrolling(true);
     startCamera();
   };
-  
+
   const cancelEnrollment = () => {
     stopCamera();
     setIsEnrolling(false);
     onClose(); // Also call onClose when cancelling
   };
-  
+
 
   if (!isEnrolling) {
     return (
@@ -300,7 +300,7 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
               required
             />
           </div>
-          
+
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Hash className="h-4 w-4 text-muted-foreground" />
@@ -315,7 +315,7 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
               required
             />
           </div>
-          
+
           <div className="space-y-2">
             <p className="text-sm font-medium">Captured Images ({capturedImages.length}/5)</p>
             {capturedImages.length > 0 ? (
@@ -345,7 +345,7 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
               <p className="text-xs text-orange-600">⚠️ Minimum 3 images required (5 recommended for better accuracy)</p>
             )}
           </div>
-          
+
           <div className="pt-2">
             <Button
               onClick={handleSubmit}

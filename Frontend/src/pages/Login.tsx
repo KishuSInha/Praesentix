@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronRight, ScanFace, Database, Network } from "lucide-react";
 import Logo from "../components/Logo";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const Login = () => {
   const navigate = useNavigate();
@@ -24,8 +25,7 @@ const Login = () => {
     if (!formData.userType) return alert("SECURITY ALERT: Please select a Role.");
     setIsLoading(true);
     try {
-      // Use 127.0.0.1 to avoid potential localhost resolution issues across different environments
-      const response = await fetch('http://127.0.0.1:5002/api/login', {
+      const response = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -50,7 +50,7 @@ const Login = () => {
       }
     } catch (error) {
       console.error("Connection Failed:", error);
-      alert("System Error: Failed to connect to secure server (http://127.0.0.1:5002). Please ensure the backend is running.");
+      alert(`System Error: Failed to connect to secure server (${API_URL}). Please ensure the backend is running.`);
     } finally {
       setIsLoading(false);
     }

@@ -188,7 +188,7 @@ export const mockSchools: School[] = [
 export const API_CONFIG = {
   // Set to false to use real API instead of mock data
   USE_MOCK: false,
-  BASE_URL: "http://localhost:5002/api",
+  BASE_URL: `${import.meta.env.VITE_API_URL}/api`,
   // Add CORS headers to allow requests from port 8080
   headers: {
     'Content-Type': 'application/json',
@@ -223,24 +223,24 @@ export const mockAPI = {
   // Student operations
   getStudents: async (classFilter?: string, sectionFilter?: string): Promise<Student[]> => {
     await new Promise(resolve => setTimeout(resolve, 300)); // Simulate network delay
-    
+
     let filtered = [...mockStudents];
-    
+
     if (classFilter) {
       filtered = filtered.filter(s => s.class === classFilter);
     }
-    
+
     if (sectionFilter) {
       filtered = filtered.filter(s => s.section === sectionFilter);
     }
-    
+
     return filtered;
   },
 
   searchStudents: async (query: string): Promise<Student[]> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    
-    return mockStudents.filter(student => 
+
+    return mockStudents.filter(student =>
       student.name.toLowerCase().includes(query.toLowerCase()) ||
       student.rollNumber.toLowerCase().includes(query.toLowerCase())
     );
@@ -266,7 +266,7 @@ export const mockAPI = {
   // Dashboard stats
   getDashboardStats: async (userType: string) => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    
+
     switch (userType) {
       case 'student':
         return {
@@ -276,7 +276,7 @@ export const mockAPI = {
           absentDays: 11,
           rank: 5
         };
-      
+
       case 'teacher':
         return {
           totalClasses: 6,
@@ -284,7 +284,7 @@ export const mockAPI = {
           averageAttendance: 89.5,
           todayPresent: 213
         };
-      
+
       case 'admin':
         return {
           totalStudents: 450,
@@ -292,7 +292,7 @@ export const mockAPI = {
           averageAttendance: 87.2,
           activeUsers: 445
         };
-      
+
       case 'education':
         return {
           totalSchools: mockSchools.length,
@@ -301,7 +301,7 @@ export const mockAPI = {
           averageAttendance: mockSchools.reduce((sum, s) => sum + s.attendanceRate, 0) / mockSchools.length,
           averageDropoutRate: mockSchools.reduce((sum, s) => sum + s.dropoutRate, 0) / mockSchools.length
         };
-      
+
       default:
         return {};
     }

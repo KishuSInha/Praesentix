@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, X, AlertCircle, CheckCircle, Info } from 'lucide-react';
+const API_URL = import.meta.env.VITE_API_URL;
 
 interface Notification {
   id: number;
@@ -22,7 +23,7 @@ const NotificationCenter = () => {
 
   const fetchNotifications = async () => {
     try {
-      const response = await fetch('http://localhost:5002/api/notifications');
+      const response = await fetch(`${API_URL}/api/notifications`);
       const result = await response.json();
       if (result.success) {
         setNotifications(result.data);
@@ -36,7 +37,7 @@ const NotificationCenter = () => {
 
   const markAsRead = async (id: number) => {
     try {
-      await fetch(`http://localhost:5002/api/notifications/${id}/read`, {
+      await fetch(`${API_URL}/api/notifications`), {
         method: 'PUT'
       });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: 1 } : n));

@@ -35,7 +35,7 @@ const StudentDashboard = () => {
 
   const loadDashboardData = async (studentId: string) => {
     try {
-      const response = await fetch(`http://localhost:5002/api/student/${studentId}/stats`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/student/${studentId}/stats`);
       const result = await response.json();
       if (result.success) {
         setStats(result.data);

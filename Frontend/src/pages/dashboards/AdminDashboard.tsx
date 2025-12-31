@@ -32,7 +32,7 @@ const AdminDashboard = () => {
 
   const loadDashboardData = async () => {
     try {
-      const response = await fetch('http://localhost:5002/api/admin/stats');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/stats`);
       const result = await response.json();
       if (result.success) {
         setStats(result.data);
@@ -209,8 +209,8 @@ const AdminDashboard = () => {
                 <button
                   onClick={() => setSelectedTab('overview')}
                   className={`py-4 px-2 border-b-2 font-medium text-sm ${selectedTab === 'overview'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   System Overview
@@ -218,8 +218,8 @@ const AdminDashboard = () => {
                 <button
                   onClick={() => setSelectedTab('users')}
                   className={`py-4 px-2 border-b-2 font-medium text-sm ${selectedTab === 'users'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   User Management
@@ -227,8 +227,8 @@ const AdminDashboard = () => {
                 <button
                   onClick={() => setSelectedTab('settings')}
                   className={`py-4 px-2 border-b-2 font-medium text-sm ${selectedTab === 'settings'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   Settings
@@ -236,8 +236,8 @@ const AdminDashboard = () => {
                 <button
                   onClick={() => setSelectedTab('face-enrollment')}
                   className={`py-4 px-2 border-b-2 font-medium text-sm ${selectedTab === 'face-enrollment'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
                     }`}
                 >
                   <div className="flex items-center gap-2">

@@ -45,7 +45,7 @@ FACE_RECOGNITION_THRESHOLD = 0.68
 MODEL_NAME = 'ArcFace'
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS", "PUT"], "allow_headers": ["Content-Type"]}})
+CORS(app)
 
 # Database configuration
 # Removed Flask-SQLAlchemy config

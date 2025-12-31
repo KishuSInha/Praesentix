@@ -36,7 +36,7 @@ const TeacherDashboard = () => {
     setLoadingRecords(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      const response = await fetch(`http://localhost:5002/api/period-attendance?date=${today}`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/period-attendance?date=${today}`);
       const result = await response.json();
       if (result.success && result.data) {
         setAttendanceRecords(result.data.slice(0, 10));
@@ -50,7 +50,7 @@ const TeacherDashboard = () => {
 
   const loadDashboardData = async () => {
     try {
-      const response = await fetch('http://localhost:5002/api/teacher/stats');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/teacher/stats`);
       const result = await response.json();
       if (result.success && result.data) {
         setStats(result.data);

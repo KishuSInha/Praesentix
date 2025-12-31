@@ -161,7 +161,7 @@ const EducationDashboard = () => {
   const loadDashboardData = async () => {
     try {
       const [statsRes, schoolsData] = await Promise.all([
-        fetch('http://localhost:5002/api/education/stats'),
+        fetch(`${import.meta.env.VITE_API_URL}/api/education/stats`),
         mockAPI.getSchools()
       ]);
 
