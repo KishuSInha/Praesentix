@@ -18,7 +18,11 @@ face_mesh = mp_face_mesh.FaceMesh(
 # --- 2. Directory Setup ---
 flat_dir = '/Users/utkarshsinha/Desktop/SIH NEW/Images'
 group_dir = '/Users/utkarshsinha/Desktop/SIH NEW/Grouped Images'
-database_file = "face_encodings.db"
+# Database folder configuration
+DATABASE_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Database')
+if not os.path.exists(DATABASE_FOLDER):
+    os.makedirs(DATABASE_FOLDER)
+database_file = os.path.join(DATABASE_FOLDER, "face_encodings.db")
 
 # --- 3. Database Setup ---
 def setup_database():

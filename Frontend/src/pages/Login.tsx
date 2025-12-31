@@ -1,21 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Lock, ShieldCheck, ChevronRight, ScanFace, Database, Network } from "lucide-react";
+import { ArrowLeft, ChevronRight, ScanFace, Database, Network } from "lucide-react";
 import Logo from "../components/Logo";
 
 const Login = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({ username: "", password: "", userType: "" });
   const [isLoading, setIsLoading] = useState(false);
-  const [cursorPos, setCursorPos] = useState({ x: -100, y: -100 });
   const [cursorText, setCursorText] = useState("");
   const [isMobile, setIsMobile] = useState(false);
+  
+  // Use a ref for the cursor element to avoid re-renders on position change
+  const cursorRef = useRef(null);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener("resize", checkMobile);
-    const moveCursor = (e) => { if (!isMobile) setCursorPos({ x: e.clientX, y: e.clientY }); };
+
+    const moveCursor = (e) => {
+      if (!isMobile && cursorRef.current) {
+        // Move the cursor using CSS variables for 60fps+ performance
+        cursorRef.current.style.setProperty('--x', `${e.clientX}px`);
+        cursorRef.current.style.setProperty('--y', `${e.clientY}px`);
+      }
+    };
+
     window.addEventListener("mousemove", moveCursor);
     return () => {
       window.removeEventListener("mousemove", moveCursor);
@@ -25,36 +35,11 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Validation: Ensure a role is selected before proceeding
-    if (!formData.userType) {
-      return alert("SECURITY ALERT: Please select an Authorization Role to proceed.");
-    }
-
+    if (!formData.userType) return alert("SECURITY ALERT: Please select a Role.");
     setIsLoading(true);
-
     try {
-      // Artificial delay to simulate neural verification (aesthetic choice)
       await new Promise((r) => setTimeout(r, 1500));
-
-      // DYNAMIC NAVIGATION BASED ON YOUR FILE STRUCTURE
-      switch (formData.userType) {
-        case "student":
-          navigate("/dashboard/student");
-          break;
-        case "teacher":
-          navigate("/dashboard/teacher");
-          break;
-        case "admin":
-          navigate("/dashboard/admin");
-          break;
-        case "education":
-          navigate("/dashboard/education");
-          break;
-        default:
-          navigate("/selection"); // Fallback to your selection page
-      }
-
+      navigate(`/dashboard/${formData.userType}`);
     } catch (error) {
       console.error("Connection Failed:", error);
     } finally {
@@ -67,22 +52,23 @@ const Login = () => {
   return (
     <div className={`min-h-screen bg-[#fafafa] text-[#121212] flex flex-col lg:flex-row ${!isMobile ? 'cursor-none' : ''} font-sans`}>
 
-      {/* 1. DYNAMIC CURSOR (HIDDEN ON MOBILE) */}
+      {/* 1. OPTIMIZED CURSOR (Now uses Hardware Accelerated CSS) */}
       {!isMobile && (
         <div
-          className="fixed pointer-events-none z-[9999] transition-transform duration-150 ease-out"
-          style={{ transform: `translate3d(${cursorPos.x}px, ${cursorPos.y}px, 0)` }}
+          ref={cursorRef}
+          className="fixed pointer-events-none z-[9999] will-change-transform custom-cursor"
+          style={{ 
+            transform: `translate3d(var(--x, -100px), var(--y, -100px), 0)`,
+          }}
         >
-          <div className={`flex items-center justify-center rounded-full border border-blue-600 transition-all duration-300 ${cursorText ? 'w-20 h-20 bg-blue-600 border-none' : 'w-8 h-8'}`}>
+          <div className={`flex items-center justify-center rounded-full border border-blue-600 transition-all duration-300 ease-out ${cursorText ? 'w-20 h-20 bg-blue-600 border-none' : 'w-8 h-8'}`}>
             {cursorText && <span className="text-[9px] font-black text-white uppercase tracking-tighter">{cursorText}</span>}
           </div>
         </div>
       )}
 
-      {/* LEFT SIDE: BIOMETRIC INTERFACE - MOBILE REFACTOR */}
+      {/* LEFT SIDE: BIOMETRIC INTERFACE */}
       <div className="w-full lg:w-1/2 bg-[#0a0a0a] flex flex-col relative min-h-[450px] lg:h-screen overflow-hidden text-white shrink-0">
-
-        {/* IMAGE COMPONENT */}
         <div className="absolute inset-0 z-0">
           <img
             src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=2070"
@@ -92,25 +78,27 @@ const Login = () => {
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent" />
         </div>
 
-        {/* Laser Scanner Line */}
         <div className="absolute inset-0 z-10 pointer-events-none">
           <div className="w-full h-[1px] bg-blue-500 shadow-[0_0_15px_#3b82f6] absolute animate-scan-slow opacity-60" />
         </div>
 
-        {/* MOBILE HUD CONTENT - ADJUSTED PADDING & SCALE */}
         <div className="mt-auto p-6 md:p-16 z-20 w-full relative">
           <h1 className="text-4xl md:text-[4.5vw] font-black uppercase tracking-tighter leading-[0.8] mb-8">
             Identity <br /> <span className="text-blue-600">Verification.</span>
           </h1>
 
-          {/* Cards: Grid on desktop, horizontal scroll on very small mobile if needed, or tight stack */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               { icon: ScanFace, label: "Face ID", desc: "Neural Match" },
               { icon: Database, label: "Ledger", desc: "Immutable Log" },
               { icon: Network, label: "Mesh", desc: "Live Node" }
             ].map((item, idx) => (
-              <div key={idx} className="p-4 border border-white/10 bg-black/60 backdrop-blur-md rounded-lg">
+              <div 
+                key={idx} 
+                onMouseEnter={() => setCursorText("View")} 
+                onMouseLeave={() => setCursorText("")}
+                className="p-4 border border-white/10 bg-black/60 backdrop-blur-md rounded-lg hover:border-blue-500 transition-colors"
+              >
                 <item.icon className="text-blue-500 mb-2" size={18} />
                 <h4 className="text-[9px] font-black uppercase tracking-widest mb-0.5">{item.label}</h4>
                 <p className="text-[8px] text-slate-400 uppercase tracking-tight">{item.desc}</p>
@@ -120,19 +108,19 @@ const Login = () => {
         </div>
       </div>
 
-      {/* RIGHT SIDE: THE FORM - MOBILE OPTIMIZED */}
+      {/* RIGHT SIDE: THE FORM */}
       <div className="flex-1 bg-white p-6 md:p-24 flex flex-col justify-center relative min-h-screen lg:min-h-0">
         <div className="max-w-md w-full mx-auto">
-
           <button
             onClick={() => navigate(-1)}
+            onMouseEnter={() => setCursorText("Back")}
+            onMouseLeave={() => setCursorText("")}
             className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-black transition-colors mb-10"
           >
             <ArrowLeft size={14} /> System Exit
           </button>
 
           <form onSubmit={handleSubmit} className="space-y-10">
-            {/* Role Selection */}
             <div className="space-y-3">
               <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Authorization Role</label>
               <div className="grid grid-cols-2 gap-2">
@@ -140,9 +128,10 @@ const Login = () => {
                   <button
                     key={role}
                     type="button"
+                    onMouseEnter={() => setCursorText("Select")}
+                    onMouseLeave={() => setCursorText("")}
                     onClick={() => handleChange("userType", role)}
-                    className={`py-3 border text-[9px] font-black uppercase tracking-widest transition-all rounded-sm ${formData.userType === role ? "border-blue-600 bg-blue-600 text-white" : "border-slate-100 text-slate-400 bg-[#fafafa]"
-                      }`}
+                    className={`py-3 border text-[9px] font-black uppercase tracking-widest transition-all rounded-sm ${formData.userType === role ? "border-blue-600 bg-blue-600 text-white" : "border-slate-100 text-slate-400 bg-[#fafafa]"}`}
                   >
                     {role}
                   </button>
@@ -150,14 +139,13 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Inputs */}
             <div className="space-y-6">
               <div className="group border-b border-slate-200 focus-within:border-blue-600 transition-all">
                 <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 group-focus-within:text-blue-600">User_Token</span>
                 <input
                   type="text"
                   required
-                  className="w-full bg-transparent py-3 text-lg font-bold outline-none"
+                  className="w-full bg-transparent py-3 text-lg font-bold outline-none lg:cursor-none"
                   placeholder="ID Number"
                   value={formData.username}
                   onChange={(e) => handleChange("username", e.target.value)}
@@ -169,7 +157,7 @@ const Login = () => {
                 <input
                   type="password"
                   required
-                  className="w-full bg-transparent py-3 text-lg font-bold outline-none"
+                  className="w-full bg-transparent py-3 text-lg font-bold outline-none lg:cursor-none"
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => handleChange("password", e.target.value)}
@@ -180,6 +168,8 @@ const Login = () => {
             <button
               type="submit"
               disabled={isLoading}
+              onMouseEnter={() => setCursorText("Connect")}
+              onMouseLeave={() => setCursorText("")}
               className="w-full bg-[#121212] active:scale-95 text-white py-5 flex items-center justify-center gap-4 transition-all duration-300"
             >
               <span className="text-[10px] font-black uppercase tracking-[0.3em]">
@@ -188,12 +178,6 @@ const Login = () => {
               {!isLoading && <ChevronRight size={16} />}
             </button>
           </form>
-
-          <div className="mt-12 text-center">
-            <p className="text-[8px] font-black uppercase tracking-widest text-slate-300">
-              © 2025 Praesentix Secure Intelligence
-            </p>
-          </div>
         </div>
       </div>
 
@@ -201,6 +185,10 @@ const Login = () => {
         __html: `
         @media (min-width: 1024px) {
           body, input, button { cursor: none !important; }
+          .custom-cursor { 
+            /* This ensures the cursor ignores hover transition delays for position */
+            transition: width 0.3s ease-out, height 0.3s ease-out, background-color 0.3s ease-out; 
+          }
         }
         @keyframes scan-slow { 
           0% { top: 0% } 

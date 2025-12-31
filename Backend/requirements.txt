@@ -1,7 +1,8 @@
 Flask
-flask_cors
+flask-cors
+gunicorn
 opencv-python
 numpy
-face_recognition
-pyttsx3
 deepface
+tf-keras
+tensorflow
