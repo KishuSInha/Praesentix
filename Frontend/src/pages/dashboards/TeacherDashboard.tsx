@@ -17,12 +17,17 @@ interface TeacherStats {
 const TeacherDashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<TeacherStats | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showPeriodAttendance, setShowPeriodAttendance] = useState(false);
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
 
   useEffect(() => {
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
     loadDashboardData();
     loadAttendanceRecords();
   }, []);
@@ -45,8 +50,11 @@ const TeacherDashboard = () => {
 
   const loadDashboardData = async () => {
     try {
-      const data = await mockAPI.getDashboardStats('teacher') as TeacherStats;
-      setStats(data);
+      const response = await fetch('http://localhost:5002/api/teacher/stats');
+      const result = await response.json();
+      if (result.success && result.data) {
+        setStats(result.data);
+      }
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -96,20 +104,37 @@ const TeacherDashboard = () => {
 
       <main className="container mx-auto px-4 py-6">
         <div className="space-y-6">
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
-                  <BookOpen className="w-7 h-7 text-white" />
+          {/* Welcome Section */}
+          <div className="bg-gradient-to-br from-[#4f46e5] via-[#7c3aed] to-[#db2777] rounded-2xl p-8 text-white shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-40 -mt-40 blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
+            <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-400/20 rounded-full -ml-20 -mb-20 blur-2xl"></div>
+
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center space-x-6">
+                <div className="relative">
+                  <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-inner">
+                    <BookOpen className="w-10 h-10 text-white" />
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 border-4 border-[#7c3aed] rounded-full"></div>
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold">Welcome, Mrs. Sunita Devi</h2>
-                  <p className="text-blue-100 text-sm">Computer Science Department</p>
+                  <h2 className="text-3xl font-black tracking-tight">{user?.fullName || 'Teacher'}</h2>
+                  <p className="text-purple-100 font-medium tracking-wide uppercase text-xs mt-1">
+                    Faculty Access • Secure Data Node
+                  </p>
+                  <div className="flex items-center mt-3 space-x-4">
+                    <div className="flex items-center bg-white/10 px-3 py-1 rounded-full backdrop-blur-md">
+                      <Users className="w-4 h-4 mr-1.5 text-blue-200" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">{stats?.studentsTotal} Students</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold">{stats?.totalClasses}</div>
-                <div className="text-xs text-blue-100">Classes</div>
+              <div className="text-right hidden md:block">
+                <div className="text-5xl font-black tracking-tighter mb-1">{stats?.totalClasses}</div>
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-100 opacity-80">
+                  Active Periods
+                </div>
               </div>
             </div>
           </div>
@@ -138,7 +163,7 @@ const TeacherDashboard = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Quick Actions</h3>
-              <SearchBar 
+              <SearchBar
                 placeholder="Search students, classes..."
                 onSearch={(query) => console.log('Search:', query)}
                 filters={[
@@ -149,7 +174,7 @@ const TeacherDashboard = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <button 
+              <button
                 onClick={() => navigate('/manual-attendance')}
                 className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg text-left transition-colors"
               >
@@ -160,7 +185,7 @@ const TeacherDashboard = () => {
                 </div>
               </button>
 
-              <button 
+              <button
                 onClick={() => navigate('/camera-attendance')}
                 className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg text-left transition-colors"
               >
@@ -171,7 +196,7 @@ const TeacherDashboard = () => {
                 </div>
               </button>
 
-              <button 
+              <button
                 onClick={() => navigate('/attendance-reports')}
                 className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg text-left transition-colors"
               >
@@ -182,7 +207,7 @@ const TeacherDashboard = () => {
                 </div>
               </button>
 
-              <button 
+              <button
                 onClick={() => setShowPeriodAttendance(true)}
                 className="bg-orange-600 hover:bg-orange-700 text-white p-4 rounded-lg text-left transition-colors"
               >

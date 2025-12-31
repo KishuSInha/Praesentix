@@ -19,28 +19,29 @@ interface StudentStats {
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<StudentStats | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isOnline, setIsOnline] = useState(true);
-  const studentId = "106";
 
   useEffect(() => {
-    loadDashboardData();
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      loadDashboardData(parsedUser.studentId);
+    } else {
+      navigate('/login');
+    }
   }, []);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (studentId: string) => {
     try {
-      const enhancedData = await enhancedApi.getStudentAttendance(studentId);
-      if (enhancedData.success) {
-        setStats(enhancedData.data);
-        setIsOnline(true);
-      } else {
-        throw new Error('Enhanced API failed');
+      const response = await fetch(`http://localhost:5002/api/student/${studentId}/stats`);
+      const result = await response.json();
+      if (result.success) {
+        setStats(result.data);
       }
     } catch (error) {
-      console.error("Enhanced API failed, using mock data:", error);
-      setIsOnline(false);
-      const data = await mockAPI.getDashboardStats("student") as StudentStats;
-      setStats(data);
+      console.error("Failed to load dashboard data:", error);
     } finally {
       setIsLoading(false);
     }
@@ -121,28 +122,39 @@ Class Rank,#${stats?.rank}`;
       <main className="container mx-auto px-4 py-6">
         <div className="space-y-6">
           {/* Welcome Section */}
-          <div className="bg-gradient-to-r from-green-600 to-blue-600 rounded-xl p-6 text-white shadow-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
-                  <User className="w-7 h-7 text-white" />
+          <div className="bg-gradient-to-br from-[#1e3a8a] via-[#3b82f6] to-[#60a5fa] rounded-2xl p-8 text-white shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-400/20 rounded-full -ml-16 -mb-16 blur-2xl"></div>
+
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center space-x-6">
+                <div className="relative">
+                  <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-inner overflow-hidden">
+                    <User className="w-10 h-10 text-white" />
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 border-4 border-[#3b82f6] rounded-full"></div>
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold">Welcome, Utkarsh Sinha</h2>
-                  <p className="text-green-100 text-sm">Class XII A • Roll: 106</p>
-                  <div className="flex items-center mt-1">
-                    <Award className="w-4 h-4 mr-1" />
-                    <span className="text-xs">Rank #{stats?.rank} in class</span>
-                    {!isOnline && (
-                      <span className="ml-2 text-xs bg-yellow-500/20 px-2 py-1 rounded">Demo Mode</span>
-                    )}
+                  <h2 className="text-3xl font-black tracking-tight">{user?.fullName || 'Student'}</h2>
+                  <p className="text-blue-100 font-medium tracking-wide uppercase text-xs mt-1">
+                    Student ID: {user?.studentId} • Verification Level: Gold
+                  </p>
+                  <div className="flex items-center mt-3 space-x-4">
+                    <div className="flex items-center bg-white/10 px-3 py-1 rounded-full backdrop-blur-md">
+                      <Award className="w-4 h-4 mr-1.5 text-yellow-400" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Rank #{stats?.rank}</span>
+                    </div>
+                    <div className="flex items-center bg-white/10 px-3 py-1 rounded-full backdrop-blur-md">
+                      <Calendar className="w-4 h-4 mr-1.5 text-blue-200" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Semester 2</span>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold">{stats?.attendancePercentage}%</div>
-                <div className="text-xs text-green-100">
-                  {isOnline ? 'Live Data' : 'Demo Data'}
+              <div className="text-right hidden md:block">
+                <div className="text-5xl font-black tracking-tighter mb-1">{stats?.attendancePercentage}%</div>
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100 opacity-80">
+                  Real-time Attendance
                 </div>
               </div>
             </div>
@@ -216,7 +228,7 @@ Class Rank,#${stats?.rank}`;
                 </button>
               </Tooltip>
               <Tooltip content="Download attendance report (Ctrl+D)">
-                <button 
+                <button
                   onClick={downloadReport}
                   className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg text-left transition-colors w-full"
                 >

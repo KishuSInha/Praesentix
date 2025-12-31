@@ -1,109 +1,104 @@
-import sqlite3
 import os
 from datetime import datetime
 import csv
 import io
-
-# Database folder configuration
-DATABASE_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Database')
-
-def setup_period_attendance_database(database_file=None):
-    """Create the SQLite database and table for period-based attendance records."""
-    if database_file is None:
-        database_file = os.path.join(DATABASE_FOLDER, "period_attendance.db")
-    
-    conn = sqlite3.connect(database_file)
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS period_attendance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT NOT NULL,
-            name TEXT NOT NULL,
-            date TEXT NOT NULL,
-            period TEXT NOT NULL,
-            time TEXT NOT NULL,
-            emotion TEXT DEFAULT 'Neutral',
-            spoofing_status TEXT DEFAULT 'LIVE',
-            liveliness_confidence REAL DEFAULT 75.0,
-            recognition_confidence REAL DEFAULT 85.0,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(student_id, date, period)
-        )
-    ''')
-    
-    conn.commit()
-    return conn
+from neon_db import get_db
+from models import Attendance, Notification
+from sqlalchemy import desc
 
 def mark_period_attendance(student_id, name, date_str, period, emotion="Neutral", 
-                          liveness_confidence=75.0, recognition_confidence=85.0, is_live=True):
+                          liveness_confidence=75.0, recognition_confidence=85.0, is_live=True, db=None):
     """Mark attendance for a specific period."""
+    should_close = False
+    if db is None:
+        db = next(get_db())
+        should_close = True
+    
     try:
-        conn = setup_period_attendance_database()
-        cursor = conn.cursor()
-        
+        print(f"[DEBUG] Attempting to mark attendance for {name} ({student_id}) on {date_str}, period {period}", flush=True)
         time_str = datetime.now().strftime("%H:%M:%S")
         spoofing_status = "LIVE" if is_live else "SPOOFED"
         
         # Check for duplicate
-        cursor.execute('''
-            SELECT COUNT(*) FROM period_attendance 
-            WHERE student_id = ? AND date = ? AND period = ?
-        ''', (student_id, date_str, period))
+        existing = db.query(Attendance).filter(
+            Attendance.student_id == student_id,
+            Attendance.date == date_str,
+            Attendance.period == period
+        ).first()
         
-        if cursor.fetchone()[0] > 0:
-            conn.close()
+        if existing:
+            print(f"[DEBUG] Duplicate attendance found for {student_id}", flush=True)
             return False, "Attendance already marked for this period"
         
         # Insert new record
-        cursor.execute('''
-            INSERT INTO period_attendance 
-            (student_id, name, date, period, time, emotion, spoofing_status, 
-             liveliness_confidence, recognition_confidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (student_id, name, date_str, period, time_str, emotion, 
-              spoofing_status, liveness_confidence, recognition_confidence))
+        new_record = Attendance(
+            student_id=student_id,
+            name=name,
+            date=date_str,
+            period=period,
+            time=time_str,
+            emotion=emotion,
+            spoof_status=spoofing_status,
+            liveness_confidence=float(liveness_confidence),
+            recognition_confidence=float(recognition_confidence),
+            timestamp=datetime.utcnow()
+        )
         
-        conn.commit()
-        conn.close()
+        db.add(new_record)
+        
+        # Create Notification
+        new_notification = Notification(
+            type="attendance",
+            title="Attendance Marked",
+            message=f"Attendance marked for {name} ({student_id})",
+            timestamp=datetime.utcnow(),
+            read=0
+        )
+        db.add(new_notification)
+        
+        db.commit()
+        print(f"[DEBUG] Successfully marked attendance and created notification for {student_id}", flush=True)
         return True, "Attendance marked successfully"
         
     except Exception as e:
+        print(f"[ERROR] Failed to mark attendance: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        if should_close:
+            db.rollback()
         return False, f"Database error: {str(e)}"
+    finally:
+        if should_close:
+            db.close()
 
 def get_period_attendance(date_str=None, period=None, class_filter=None):
     """Get period attendance records with optional filtering."""
+    db = next(get_db())
     try:
-        conn = setup_period_attendance_database()
-        cursor = conn.cursor()
-        
-        query = '''
-            SELECT id, student_id, name, date, period, time, emotion, 
-                   spoofing_status, liveliness_confidence, recognition_confidence, timestamp
-            FROM period_attendance
-        '''
-        
-        params = []
-        where_clauses = []
+        query = db.query(Attendance)
         
         if date_str:
-            where_clauses.append("date = ?")
-            params.append(date_str)
+            query = query.filter(Attendance.date == date_str)
         
         if period:
-            where_clauses.append("period = ?")
-            params.append(period)
+            query = query.filter(Attendance.period == period)
+            
+        records = query.order_by(desc(Attendance.date), Attendance.period, desc(Attendance.time)).all()
         
-        if where_clauses:
-            query += " WHERE " + " AND ".join(where_clauses)
+        # Convert to list of tuples/dicts to match expected format of calling code (mostly tuple based in legacy)
+        # However, calling code (app.py) expects records[0] etc.
+        # Let's verify what app.py expects. It does `record[0]` etc. in `get_period_attendance_api`.
+        # So we should convert models to tuples or dicts.
         
-        query += " ORDER BY date DESC, period, time DESC"
-        
-        cursor.execute(query, params)
-        records = cursor.fetchall()
-        conn.close()
-        
-        return records
+        results = []
+        for r in records:
+            results.append((
+                r.id, r.student_id, r.name, r.date, r.period, r.time, 
+                r.emotion, r.spoof_status, r.liveness_confidence, 
+                r.recognition_confidence, r.timestamp
+            ))
+            
+        return results
         
     except Exception as e:
         print(f"Error getting period attendance: {e}")
@@ -173,33 +168,28 @@ def export_period_attendance_csv(date_str=None, period=None):
 
 def get_attendance_summary(date_str=None):
     """Get attendance summary by period for a specific date."""
+    db = next(get_db())
     try:
-        conn = setup_period_attendance_database()
-        cursor = conn.cursor()
+        # This is a complex aggregation. In SQLAlchemy:
+        # SELECT period, COUNT(*), COUNT(case live), COUNT(case spoof) GROUP BY period
         
-        if date_str:
-            cursor.execute('''
-                SELECT period, COUNT(*) as total_present,
-                       COUNT(CASE WHEN spoofing_status = 'LIVE' THEN 1 END) as live_count,
-                       COUNT(CASE WHEN spoofing_status = 'SPOOFED' THEN 1 END) as spoofed_count
-                FROM period_attendance 
-                WHERE date = ?
-                GROUP BY period
-                ORDER BY period
-            ''', (date_str,))
-        else:
-            cursor.execute('''
-                SELECT period, COUNT(*) as total_present,
-                       COUNT(CASE WHEN spoofing_status = 'LIVE' THEN 1 END) as live_count,
-                       COUNT(CASE WHEN spoofing_status = 'SPOOFED' THEN 1 END) as spoofed_count
-                FROM period_attendance 
-                WHERE date = date('now')
-                GROUP BY period
-                ORDER BY period
-            ''')
+        # For simplicity and direct replacement, we can use raw SQL via session
+        from sqlalchemy import text
         
-        records = cursor.fetchall()
-        conn.close()
+        target_date = date_str if date_str else datetime.now().strftime('%Y-%m-%d')
+        
+        sql = text("""
+            SELECT period, COUNT(*) as total_present,
+                   SUM(CASE WHEN spoof_status = 'LIVE' THEN 1 ELSE 0 END) as live_count,
+                   SUM(CASE WHEN spoof_status = 'SPOOFED' THEN 1 ELSE 0 END) as spoofed_count
+            FROM attendance 
+            WHERE date = :date
+            GROUP BY period
+            ORDER BY period
+        """)
+        
+        result = db.execute(sql, {'date': target_date})
+        records = result.fetchall()
         
         return records
         

@@ -6,3 +6,6 @@ numpy
 deepface
 tf-keras
 tensorflow
+psycopg2-binary
+python-dotenv
+sqlalchemy

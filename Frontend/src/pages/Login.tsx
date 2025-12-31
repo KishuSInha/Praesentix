@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronRight, ScanFace, Database, Network } from "lucide-react";
 import Logo from "../components/Logo";
@@ -7,41 +7,50 @@ const Login = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({ username: "", password: "", userType: "" });
   const [isLoading, setIsLoading] = useState(false);
-  const [cursorText, setCursorText] = useState("");
   const [isMobile, setIsMobile] = useState(false);
-  
-  // Use a ref for the cursor element to avoid re-renders on position change
-  const cursorRef = useRef(null);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener("resize", checkMobile);
 
-    const moveCursor = (e) => {
-      if (!isMobile && cursorRef.current) {
-        // Move the cursor using CSS variables for 60fps+ performance
-        cursorRef.current.style.setProperty('--x', `${e.clientX}px`);
-        cursorRef.current.style.setProperty('--y', `${e.clientY}px`);
-      }
-    };
-
-    window.addEventListener("mousemove", moveCursor);
     return () => {
-      window.removeEventListener("mousemove", moveCursor);
       window.removeEventListener("resize", checkMobile);
     };
-  }, [isMobile]);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.userType) return alert("SECURITY ALERT: Please select a Role.");
     setIsLoading(true);
     try {
-      await new Promise((r) => setTimeout(r, 1500));
-      navigate(`/dashboard/${formData.userType}`);
+      // Use 127.0.0.1 to avoid potential localhost resolution issues across different environments
+      const response = await fetch('http://127.0.0.1:5002/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password,
+          role: formData.userType
+        })
+      });
+
+      if (!response.ok && response.status !== 401) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Store user data for dashboards
+        localStorage.setItem('currentUser', JSON.stringify(result.user));
+        navigate(`/dashboard/${formData.userType}`);
+      } else {
+        alert(result.message || "Access Denied: Invalid Credentials");
+      }
     } catch (error) {
       console.error("Connection Failed:", error);
+      alert("System Error: Failed to connect to secure server (http://127.0.0.1:5002). Please ensure the backend is running.");
     } finally {
       setIsLoading(false);
     }
@@ -50,22 +59,9 @@ const Login = () => {
   const handleChange = (field, value) => setFormData((p) => ({ ...p, [field]: value }));
 
   return (
-    <div className={`min-h-screen bg-[#fafafa] text-[#121212] flex flex-col lg:flex-row ${!isMobile ? 'cursor-none' : ''} font-sans`}>
+    <div className="min-h-screen bg-[#fafafa] text-[#121212] flex flex-col lg:flex-row font-sans">
 
-      {/* 1. OPTIMIZED CURSOR (Now uses Hardware Accelerated CSS) */}
-      {!isMobile && (
-        <div
-          ref={cursorRef}
-          className="fixed pointer-events-none z-[9999] will-change-transform custom-cursor"
-          style={{ 
-            transform: `translate3d(var(--x, -100px), var(--y, -100px), 0)`,
-          }}
-        >
-          <div className={`flex items-center justify-center rounded-full border border-blue-600 transition-all duration-300 ease-out ${cursorText ? 'w-20 h-20 bg-blue-600 border-none' : 'w-8 h-8'}`}>
-            {cursorText && <span className="text-[9px] font-black text-white uppercase tracking-tighter">{cursorText}</span>}
-          </div>
-        </div>
-      )}
+
 
       {/* LEFT SIDE: BIOMETRIC INTERFACE */}
       <div className="w-full lg:w-1/2 bg-[#0a0a0a] flex flex-col relative min-h-[450px] lg:h-screen overflow-hidden text-white shrink-0">
@@ -93,10 +89,8 @@ const Login = () => {
               { icon: Database, label: "Ledger", desc: "Immutable Log" },
               { icon: Network, label: "Mesh", desc: "Live Node" }
             ].map((item, idx) => (
-              <div 
-                key={idx} 
-                onMouseEnter={() => setCursorText("View")} 
-                onMouseLeave={() => setCursorText("")}
+              <div
+                key={idx}
                 className="p-4 border border-white/10 bg-black/60 backdrop-blur-md rounded-lg hover:border-blue-500 transition-colors"
               >
                 <item.icon className="text-blue-500 mb-2" size={18} />
@@ -113,8 +107,6 @@ const Login = () => {
         <div className="max-w-md w-full mx-auto">
           <button
             onClick={() => navigate(-1)}
-            onMouseEnter={() => setCursorText("Back")}
-            onMouseLeave={() => setCursorText("")}
             className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-black transition-colors mb-10"
           >
             <ArrowLeft size={14} /> System Exit
@@ -128,8 +120,6 @@ const Login = () => {
                   <button
                     key={role}
                     type="button"
-                    onMouseEnter={() => setCursorText("Select")}
-                    onMouseLeave={() => setCursorText("")}
                     onClick={() => handleChange("userType", role)}
                     className={`py-3 border text-[9px] font-black uppercase tracking-widest transition-all rounded-sm ${formData.userType === role ? "border-blue-600 bg-blue-600 text-white" : "border-slate-100 text-slate-400 bg-[#fafafa]"}`}
                   >
@@ -145,7 +135,7 @@ const Login = () => {
                 <input
                   type="text"
                   required
-                  className="w-full bg-transparent py-3 text-lg font-bold outline-none lg:cursor-none"
+                  className="w-full bg-transparent py-3 text-lg font-bold outline-none"
                   placeholder="ID Number"
                   value={formData.username}
                   onChange={(e) => handleChange("username", e.target.value)}
@@ -157,7 +147,7 @@ const Login = () => {
                 <input
                   type="password"
                   required
-                  className="w-full bg-transparent py-3 text-lg font-bold outline-none lg:cursor-none"
+                  className="w-full bg-transparent py-3 text-lg font-bold outline-none"
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => handleChange("password", e.target.value)}
@@ -168,8 +158,6 @@ const Login = () => {
             <button
               type="submit"
               disabled={isLoading}
-              onMouseEnter={() => setCursorText("Connect")}
-              onMouseLeave={() => setCursorText("")}
               className="w-full bg-[#121212] active:scale-95 text-white py-5 flex items-center justify-center gap-4 transition-all duration-300"
             >
               <span className="text-[10px] font-black uppercase tracking-[0.3em]">
@@ -184,11 +172,6 @@ const Login = () => {
       <style dangerouslySetInnerHTML={{
         __html: `
         @media (min-width: 1024px) {
-          body, input, button { cursor: none !important; }
-          .custom-cursor { 
-            /* This ensures the cursor ignores hover transition delays for position */
-            transition: width 0.3s ease-out, height 0.3s ease-out, background-color 0.3s ease-out; 
-          }
         }
         @keyframes scan-slow { 
           0% { top: 0% } 

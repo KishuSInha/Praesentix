@@ -19,6 +19,7 @@ interface EducationStats {
 const EducationDashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<EducationStats | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [schools, setSchools] = useState<ExtendedSchoolType[]>([]);
   const [filteredSchools, setFilteredSchools] = useState<ExtendedSchoolType[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,10 +52,10 @@ const EducationDashboard = () => {
         const currentStudents = school.currentStudents ?? (school.totalStudents ?? 0);
         const totalStudents = school.totalStudents ?? 0;
         const totalTeachers = school.totalTeachers ?? 0;
-        const lastUpdated = typeof school.lastUpdated === 'string' 
-          ? school.lastUpdated.split('T')[0] 
+        const lastUpdated = typeof school.lastUpdated === 'string'
+          ? school.lastUpdated.split('T')[0]
           : new Date().toISOString().split('T')[0];
-        
+
         return {
           name: `"${school.name || 'N/A'}"`,
           id: school.id?.toString() || 'N/A',
@@ -67,13 +68,13 @@ const EducationDashboard = () => {
           lastUpdated
         };
       });
-      
+
       // Convert to CSV format
       const csvContent = [
         headers.join(','),
         ...rows.map(row => `${row.name},${row.id},${row.location},${row.totalStudents},${row.currentStudents},${row.teachers},${row.attendance},${row.dropout},${row.lastUpdated}`)
       ].join('\n');
-      
+
       // Create download link
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -92,11 +93,11 @@ const EducationDashboard = () => {
   // Filter schools by high dropout rate
   const analyzeDropout = (): void => {
     try {
-      const highDropoutSchools = schools.filter(school => 
+      const highDropoutSchools = schools.filter(school =>
         (school.dropoutRate || 0) > 3 // Threshold of 3% with fallback to 0 if undefined
       );
       setFilteredSchools(highDropoutSchools);
-      
+
       // Show alert with analysis
       alert(`Found ${highDropoutSchools.length} schools with dropout rate above 3%`);
     } catch (error) {
@@ -112,7 +113,7 @@ const EducationDashboard = () => {
     console.log(`Generating ${type} report...`);
     // Show dialog to confirm report generation
     setShowCustomReportDialog(true);
-    
+
     // Close the dialog after a short delay
     setTimeout(() => {
       setShowCustomReportDialog(false);
@@ -138,12 +139,16 @@ const EducationDashboard = () => {
   ];
 
   useEffect(() => {
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
     loadDashboardData();
   }, []);
 
   useEffect(() => {
     if (searchQuery.trim()) {
-      const filtered = schools.filter(school => 
+      const filtered = schools.filter(school =>
         school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         school.location.toLowerCase().includes(searchQuery.toLowerCase())
       );
@@ -155,11 +160,14 @@ const EducationDashboard = () => {
 
   const loadDashboardData = async () => {
     try {
-      const [statsData, schoolsData] = await Promise.all([
-        mockAPI.getDashboardStats('education') as Promise<EducationStats>,
+      const [statsRes, schoolsData] = await Promise.all([
+        fetch('http://localhost:5002/api/education/stats'),
         mockAPI.getSchools()
       ]);
-      
+
+      const statsJson = await statsRes.json();
+      const statsData = statsJson.data;
+
       // Ensure all schools have the required properties with defaults
       const processedSchools = (schoolsData || []).map(school => ({
         ...school,
@@ -170,19 +178,19 @@ const EducationDashboard = () => {
         dropoutRate: school.dropoutRate || 0,
         lastUpdated: school.lastUpdated || new Date().toISOString().split('T')[0]
       }));
-      
+
       setStats({
         totalSchools: processedSchools.length,
         totalStudents: processedSchools.reduce((sum, school) => sum + (school.totalStudents || 0), 0),
         totalTeachers: processedSchools.reduce((sum, school) => sum + (school.totalTeachers || 0), 0),
-        averageAttendance: processedSchools.length > 0 
+        averageAttendance: processedSchools.length > 0
           ? processedSchools.reduce((sum, school) => sum + (school.attendanceRate || 0), 0) / processedSchools.length
           : 0,
         averageDropoutRate: processedSchools.length > 0
           ? processedSchools.reduce((sum, school) => sum + (school.dropoutRate || 0), 0) / processedSchools.length
           : 0
       });
-      
+
       setSchools(processedSchools);
       setFilteredSchools(processedSchools);
     } catch (error) {
@@ -247,14 +255,36 @@ const EducationDashboard = () => {
       <main className="container mx-auto px-3 py-4">
         <div className="space-y-4 animate-fade-in">
           {/* Welcome Section */}
-          <div className="card-education rounded-2xl p-4 text-center">
-            <div className="w-14 h-14 mx-auto bg-gradient-to-br from-education to-education/80 rounded-full flex items-center justify-center shadow-lg mb-3">
-              <BarChart3 className="w-7 h-7 text-white" />
-            </div>
-            <h2 className="text-lg font-bold text-foreground mb-1">{t(' Education Office, Punjab')}</h2>
-            <p className="text-sm text-black">{t('Amritsar')}</p>
-            <div className="mt-3 inline-flex items-center px-3 py-1.5 bg-background/20 rounded-full">
-              <span className="text-xs font-medium">{t('Monitoring 5 Schools', { totalSchools: stats?.totalSchools })}</span>
+          <div className="bg-gradient-to-br from-[#065f46] via-[#10b981] to-[#34d399] rounded-2xl p-8 text-white shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-40 -mt-40 blur-3xl group-hover:bg-white/20 transition-all duration-1000"></div>
+            <div className="absolute bottom-0 left-0 w-40 h-40 bg-emerald-400/20 rounded-full -ml-20 -mb-20 blur-2xl"></div>
+
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center space-x-6">
+                <div className="relative">
+                  <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-inner">
+                    <BarChart3 className="w-10 h-10 text-white" />
+                  </div>
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black tracking-tight">{user?.fullName || 'Distict Officer'}</h2>
+                  <p className="text-emerald-100 font-medium tracking-wide uppercase text-xs mt-1">
+                    Amritsar District • Education Management Node
+                  </p>
+                  <div className="flex items-center mt-3 space-x-4">
+                    <div className="flex items-center bg-white/10 px-3 py-1 rounded-full backdrop-blur-md">
+                      <School className="w-4 h-4 mr-1.5 text-blue-200" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">{stats?.totalSchools} Schools</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="text-right hidden md:block">
+                <div className="text-5xl font-black tracking-tighter mb-1">{stats?.averageAttendance?.toFixed(1)}%</div>
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-100 opacity-80">
+                  District Attendance
+                </div>
+              </div>
             </div>
           </div>
 
@@ -340,7 +370,7 @@ const EducationDashboard = () => {
               <h3 className="text-base font-semibold">{t('Quick Actions Title')}</h3>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-              <button 
+              <button
                 onClick={exportDistrictData}
                 className="btn-primary text-left p-3 h-auto group hover:shadow-lg hover:shadow-primary/20 transition-all duration-300"
               >
@@ -350,8 +380,8 @@ const EducationDashboard = () => {
                   <p className="text-xs opacity-80">{t('Download as CSV')}</p>
                 </div>
               </button>
-              
-              <button 
+
+              <button
                 onClick={toggleCharts}
                 className="btn-secondary text-left p-3 h-auto group hover:shadow-lg hover:shadow-secondary/20 transition-all duration-300"
               >
@@ -364,7 +394,7 @@ const EducationDashboard = () => {
                 </div>
               </button>
 
-              <button 
+              <button
                 onClick={analyzeDropout}
                 className="btn-secondary text-left p-3 h-auto group hover:shadow-lg hover:shadow-destructive/20 transition-all duration-300"
               >
@@ -375,7 +405,7 @@ const EducationDashboard = () => {
                 </div>
               </button>
 
-              <button 
+              <button
                 onClick={() => setShowCustomReportDialog(true)}
                 className="btn-secondary text-left p-3 h-auto group hover:shadow-lg hover:shadow-accent/20 transition-all duration-300"
               >
@@ -390,84 +420,84 @@ const EducationDashboard = () => {
 
           {/* Schools List */}
           <div className="bg-card rounded-xl p-4 sm:p-6 border border-border shadow-sm">
-              <div className="flex flex-col gap-4 mb-4">
-                <h3 className="text-base sm:text-lg font-semibold">{t('Schools Overview')}</h3>
-                <div className="flex flex-col sm:flex-row gap-3 w-full">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                      type="text"
-                      placeholder={t('Search Schools')}
-                      className="input-field pl-10 w-full text-sm"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <button className="btn-secondary text-sm whitespace-nowrap">
-                    <Download className="w-4 h-4 mr-2" />
-                    {t('Export')}
-                  </button>
+            <div className="flex flex-col gap-4 mb-4">
+              <h3 className="text-base sm:text-lg font-semibold">{t('Schools Overview')}</h3>
+              <div className="flex flex-col sm:flex-row gap-3 w-full">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder={t('Search Schools')}
+                    className="input-field pl-10 w-full text-sm"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
                 </div>
+                <button className="btn-secondary text-sm whitespace-nowrap">
+                  <Download className="w-4 h-4 mr-2" />
+                  {t('Export')}
+                </button>
               </div>
+            </div>
 
             <div className="overflow-x-auto -mx-4 sm:mx-0">
               <div className="min-w-[800px] px-4 sm:px-0">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('School Name')}</th>
-                    <th className="text-left py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Location')}</th>
-                    <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Students')}</th>
-                    <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Teachers')}</th>
-                    <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Attendance')}</th>
-                    <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Dropout Rate')}</th>
-                    <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSchools.map((school) => (
-                    <tr key={school.id} className="border-b border-border/50 hover:bg-secondary/20 transition-all duration-200 group">
-                      <td className="py-3 sm:py-4 px-1 sm:px-2">
-                        <div>
-                          <p className="font-medium text-foreground group-hover:text-primary transition-colors duration-200 text-xs sm:text-sm">{school.name}</p>
-                          <p className="text-xs text-muted-foreground">{t('', { date: school.lastUpdated })}</p>
-                        </div>
-                      </td>
-                      <td className="py-3 sm:py-4 px-1 sm:px-2 text-xs sm:text-sm text-muted-foreground">
-                        {school.location}
-                      </td>
-                      <td className="py-3 sm:py-4 px-1 sm:px-2 text-right">
-                        <div>
-                          <p className="font-medium group-hover:text-primary transition-colors duration-200 text-xs sm:text-sm">{school.currentStudents}</p>
-                          <p className="text-xs text-muted-foreground">{t('Active', { totalStudents: school.totalStudents })}</p>
-                        </div>
-                      </td>
-                      <td className="py-3 sm:py-4 px-1 sm:px-2 text-right font-medium group-hover:text-accent transition-colors duration-200 text-xs sm:text-sm">
-                        {school.totalTeachers}
-                      </td>
-                      <td className="py-3 sm:py-4 px-1 sm:px-2 text-right">
-                        <span className={`font-medium transition-all duration-200 text-xs sm:text-sm ${getAttendanceColor(school.attendanceRate)} group-hover:scale-105`}>
-                          {school.attendanceRate.toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className="py-3 sm:py-4 px-1 sm:px-2 text-right">
-                        <span className={`font-medium transition-all duration-200 text-xs sm:text-sm ${getDropoutColor(school.dropoutRate)} group-hover:scale-105`}>
-                          {school.dropoutRate.toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className="py-3 sm:py-4 px-1 sm:px-2 text-right">
-                        <button
-                          onClick={() => viewSchoolDetails(school)}
-                          className="btn-secondary text-xs py-1 px-2 hover:scale-105 transition-transform duration-200"
-                        >
-                          <Eye className="w-3 h-3 mr-1" />
-                          <span className="hidden sm:inline">{t('view')}</span>
-                        </button>
-                      </td>
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('School Name')}</th>
+                      <th className="text-left py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Location')}</th>
+                      <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Students')}</th>
+                      <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Teachers')}</th>
+                      <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Attendance')}</th>
+                      <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Dropout Rate')}</th>
+                      <th className="text-right py-2 sm:py-3 px-1 sm:px-2 font-medium text-muted-foreground text-xs sm:text-sm">{t('Actions')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredSchools.map((school) => (
+                      <tr key={school.id} className="border-b border-border/50 hover:bg-secondary/20 transition-all duration-200 group">
+                        <td className="py-3 sm:py-4 px-1 sm:px-2">
+                          <div>
+                            <p className="font-medium text-foreground group-hover:text-primary transition-colors duration-200 text-xs sm:text-sm">{school.name}</p>
+                            <p className="text-xs text-muted-foreground">{t('', { date: school.lastUpdated })}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 sm:py-4 px-1 sm:px-2 text-xs sm:text-sm text-muted-foreground">
+                          {school.location}
+                        </td>
+                        <td className="py-3 sm:py-4 px-1 sm:px-2 text-right">
+                          <div>
+                            <p className="font-medium group-hover:text-primary transition-colors duration-200 text-xs sm:text-sm">{school.currentStudents}</p>
+                            <p className="text-xs text-muted-foreground">{t('Active', { totalStudents: school.totalStudents })}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 sm:py-4 px-1 sm:px-2 text-right font-medium group-hover:text-accent transition-colors duration-200 text-xs sm:text-sm">
+                          {school.totalTeachers}
+                        </td>
+                        <td className="py-3 sm:py-4 px-1 sm:px-2 text-right">
+                          <span className={`font-medium transition-all duration-200 text-xs sm:text-sm ${getAttendanceColor(school.attendanceRate)} group-hover:scale-105`}>
+                            {school.attendanceRate.toFixed(1)}%
+                          </span>
+                        </td>
+                        <td className="py-3 sm:py-4 px-1 sm:px-2 text-right">
+                          <span className={`font-medium transition-all duration-200 text-xs sm:text-sm ${getDropoutColor(school.dropoutRate)} group-hover:scale-105`}>
+                            {school.dropoutRate.toFixed(1)}%
+                          </span>
+                        </td>
+                        <td className="py-3 sm:py-4 px-1 sm:px-2 text-right">
+                          <button
+                            onClick={() => viewSchoolDetails(school)}
+                            className="btn-secondary text-xs py-1 px-2 hover:scale-105 transition-transform duration-200"
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            <span className="hidden sm:inline">{t('view')}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -489,8 +519,8 @@ const EducationDashboard = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground))" opacity={0.3} />
                     <XAxis dataKey="name" stroke="hsl(var(--foreground))" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                     <YAxis stroke="hsl(var(--foreground))" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }} 
+                    <Tooltip
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
                       itemStyle={{ color: 'hsl(var(--foreground))' }}
                     />
                     <Legend />
@@ -513,8 +543,8 @@ const EducationDashboard = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground))" opacity={0.3} />
                     <XAxis dataKey="name" stroke="hsl(var(--foreground))" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
                     <YAxis stroke="hsl(var(--foreground))" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }} 
+                    <Tooltip
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }}
                       itemStyle={{ color: 'hsl(var(--foreground))' }}
                     />
                     <Legend />
@@ -542,7 +572,7 @@ const EducationDashboard = () => {
                   {t('close')}
                 </button>
               </div>
-              
+
               <div className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
@@ -552,16 +582,16 @@ const EducationDashboard = () => {
                       <p><span className="text-muted-foreground">{t('Last Updated')}:</span> {selectedSchool.lastUpdated}</p>
                     </div>
                   </div>
-                  
+
                   <div>
                     <h4 className="font-medium text-foreground mb-2">{t('Key Metrics of School')}</h4>
                     <div className="space-y-2 text-sm">
-                      <p><span className="text-muted-foreground">{t('Attendance Rate')}:</span> 
+                      <p><span className="text-muted-foreground">{t('Attendance Rate')}:</span>
                         <span className={`ml-1 font-medium ${getAttendanceColor(selectedSchool.attendanceRate)}`}>
                           {selectedSchool.attendanceRate.toFixed(1)}%
                         </span>
                       </p>
-                      <p><span className="text-muted-foreground">{t('Droput Rate')}:</span> 
+                      <p><span className="text-muted-foreground">{t('Droput Rate')}:</span>
                         <span className={`ml-1 font-medium ${getDropoutColor(selectedSchool.dropoutRate)}`}>
                           {selectedSchool.dropoutRate.toFixed(1)}%
                         </span>
@@ -576,7 +606,7 @@ const EducationDashboard = () => {
                   <div className="bg-secondary/20 rounded-lg p-4 flex items-center justify-between">
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">{t('predicted_meals_tomorrow')}</p>
-                      <p className="text-2xl font-bold text-primary">{Math.round(selectedSchool.attendanceRate * selectedSchool.currentStudents / 100 * 0.95)}</p> 
+                      <p className="text-2xl font-bold text-primary">{Math.round(selectedSchool.attendanceRate * selectedSchool.currentStudents / 100 * 0.95)}</p>
                     </div>
                     <School className="w-8 h-8 text-primary" />
                   </div>
