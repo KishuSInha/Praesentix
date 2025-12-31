@@ -1,57 +1,44 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Lock, Users } from "lucide-react";
-
+import { ArrowLeft, User, Lock, ShieldCheck, ChevronRight, ScanFace, Database, Network } from "lucide-react";
 import Logo from "../components/Logo";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    username: "",
-    password: "",
-    userType: ""
-  });
+  const [formData, setFormData] = useState({ username: "", password: "", userType: "" });
   const [isLoading, setIsLoading] = useState(false);
+  const [cursorPos, setCursorPos] = useState({ x: -100, y: -100 });
+  const [cursorText, setCursorText] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
 
-  const userTypes = [
-    { value: "student", label: "Student" },
-    { value: "teacher", label: "Teacher" },
-    { value: "admin", label: "Admin" },
-    { value: "education", label: "Education Department" }
-  ];
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    const moveCursor = (e) => { if (!isMobile) setCursorPos({ x: e.clientX, y: e.clientY }); };
+    window.addEventListener("mousemove", moveCursor);
+    return () => {
+      window.removeEventListener("mousemove", moveCursor);
+      window.removeEventListener("resize", checkMobile);
+    };
+  }, [isMobile]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
 
-    // Mock login delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const { username, password, userType } = formData;
-
-    let isAuthenticated = false;
-    switch (userType) {
-      case "student":
-        isAuthenticated = username === "student123" && password === "pass123";
-        break;
-      case "teacher":
-        isAuthenticated = username === "teacher123" && password === "pass123";
-        break;
-      case "admin":
-        isAuthenticated = username === "admin123" && password === "pass123";
-        break;
-      case "education":
-        isAuthenticated = username === "education123" && password === "pass123";
-        break;
-      default:
-        alert("Please select a user type");
-        setIsLoading(false);
-        return;
+    // Validation: Ensure a role is selected before proceeding
+    if (!formData.userType) {
+      return alert("SECURITY ALERT: Please select an Authorization Role to proceed.");
     }
 
-    if (isAuthenticated) {
-      // Navigate to appropriate dashboard
-      switch (userType) {
+    setIsLoading(true);
+
+    try {
+      // Artificial delay to simulate neural verification (aesthetic choice)
+      await new Promise((r) => setTimeout(r, 1500));
+
+      // DYNAMIC NAVIGATION BASED ON YOUR FILE STRUCTURE
+      switch (formData.userType) {
         case "student":
           navigate("/dashboard/student");
           break;
@@ -65,132 +52,165 @@ const Login = () => {
           navigate("/dashboard/education");
           break;
         default:
-          alert("An unexpected error occurred.");
+          navigate("/selection"); // Fallback to your selection page
       }
-    } else {
-      alert("Invalid credentials for " + userType + ". Please try again.");
+
+    } catch (error) {
+      console.error("Connection Failed:", error);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
-  const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
+  const handleChange = (field, value) => setFormData((p) => ({ ...p, [field]: value }));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              aria-label="Go back"
-            >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </button>
-            <Logo size="sm" />
+    <div className={`min-h-screen bg-[#fafafa] text-[#121212] flex flex-col lg:flex-row ${!isMobile ? 'cursor-none' : ''} font-sans`}>
+
+      {/* 1. DYNAMIC CURSOR (HIDDEN ON MOBILE) */}
+      {!isMobile && (
+        <div
+          className="fixed pointer-events-none z-[9999] transition-transform duration-150 ease-out"
+          style={{ transform: `translate3d(${cursorPos.x}px, ${cursorPos.y}px, 0)` }}
+        >
+          <div className={`flex items-center justify-center rounded-full border border-blue-600 transition-all duration-300 ${cursorText ? 'w-20 h-20 bg-blue-600 border-none' : 'w-8 h-8'}`}>
+            {cursorText && <span className="text-[9px] font-black text-white uppercase tracking-tighter">{cursorText}</span>}
           </div>
         </div>
-      </header>
+      )}
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-12 flex items-center justify-center min-h-[calc(100vh-80px)]">
-        <div className="max-w-md w-full animate-fade-in">
-          {/* Login Card */}
-          <div className="bg-white rounded-2xl p-8 shadow-xl border border-gray-200">
-            {/* Logo */}
-            <div className="text-center mb-8">
-              <div className="flex justify-center mb-4">
-                <Logo size="lg" />
+      {/* LEFT SIDE: BIOMETRIC INTERFACE - MOBILE REFACTOR */}
+      <div className="w-full lg:w-1/2 bg-[#0a0a0a] flex flex-col relative min-h-[450px] lg:h-screen overflow-hidden text-white shrink-0">
+
+        {/* IMAGE COMPONENT */}
+        <div className="absolute inset-0 z-0">
+          <img
+            src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=2070"
+            className="w-full h-full object-cover opacity-40 grayscale"
+            alt="Facial Recognition HUD"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent" />
+        </div>
+
+        {/* Laser Scanner Line */}
+        <div className="absolute inset-0 z-10 pointer-events-none">
+          <div className="w-full h-[1px] bg-blue-500 shadow-[0_0_15px_#3b82f6] absolute animate-scan-slow opacity-60" />
+        </div>
+
+        {/* MOBILE HUD CONTENT - ADJUSTED PADDING & SCALE */}
+        <div className="mt-auto p-6 md:p-16 z-20 w-full relative">
+          <h1 className="text-4xl md:text-[4.5vw] font-black uppercase tracking-tighter leading-[0.8] mb-8">
+            Identity <br /> <span className="text-blue-600">Verification.</span>
+          </h1>
+
+          {/* Cards: Grid on desktop, horizontal scroll on very small mobile if needed, or tight stack */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { icon: ScanFace, label: "Face ID", desc: "Neural Match" },
+              { icon: Database, label: "Ledger", desc: "Immutable Log" },
+              { icon: Network, label: "Mesh", desc: "Live Node" }
+            ].map((item, idx) => (
+              <div key={idx} className="p-4 border border-white/10 bg-black/60 backdrop-blur-md rounded-lg">
+                <item.icon className="text-blue-500 mb-2" size={18} />
+                <h4 className="text-[9px] font-black uppercase tracking-widest mb-0.5">{item.label}</h4>
+                <p className="text-[8px] text-slate-400 uppercase tracking-tight">{item.desc}</p>
               </div>
-              <p className="text-gray-600">Enter your credentials to access the system</p>
-            </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
-            {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Username */}
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-                  Username
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    id="username"
-                    required
-                    className="bg-white border border-gray-300 rounded-lg py-3 px-4 pl-12 w-full text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    placeholder="Enter your username"
-                    value={formData.username}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange("username", e.target.value)}
-                  />
-                </div>
-              </div>
+      {/* RIGHT SIDE: THE FORM - MOBILE OPTIMIZED */}
+      <div className="flex-1 bg-white p-6 md:p-24 flex flex-col justify-center relative min-h-screen lg:min-h-0">
+        <div className="max-w-md w-full mx-auto">
 
-              {/* Password */}
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="password"
-                    id="password"
-                    required
-                    className="bg-white border border-gray-300 rounded-lg py-3 px-4 pl-12 w-full text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange("password", e.target.value)}
-                  />
-                </div>
-              </div>
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-black transition-colors mb-10"
+          >
+            <ArrowLeft size={14} /> System Exit
+          </button>
 
-              {/* User Type */}
-              <div>
-                <label htmlFor="userType" className="block text-sm font-medium text-gray-700 mb-2">
-                  User Type
-                </label>
-                <div className="relative">
-                  <Users className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <select
-                    id="userType"
-                    required
-                    className="bg-white border border-gray-300 rounded-lg py-3 px-4 pl-12 w-full text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none"
-                    value={formData.userType}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleChange("userType", e.target.value)}
+          <form onSubmit={handleSubmit} className="space-y-10">
+            {/* Role Selection */}
+            <div className="space-y-3">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Authorization Role</label>
+              <div className="grid grid-cols-2 gap-2">
+                {["student", "teacher", "admin", "education"].map((role) => (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => handleChange("userType", role)}
+                    className={`py-3 border text-[9px] font-black uppercase tracking-widest transition-all rounded-sm ${formData.userType === role ? "border-blue-600 bg-blue-600 text-white" : "border-slate-100 text-slate-400 bg-[#fafafa]"
+                      }`}
                   >
-                    <option value="">Select your role</option>
-                    {userTypes.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    {role}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Inputs */}
+            <div className="space-y-6">
+              <div className="group border-b border-slate-200 focus-within:border-blue-600 transition-all">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 group-focus-within:text-blue-600">User_Token</span>
+                <input
+                  type="text"
+                  required
+                  className="w-full bg-transparent py-3 text-lg font-bold outline-none"
+                  placeholder="ID Number"
+                  value={formData.username}
+                  onChange={(e) => handleChange("username", e.target.value)}
+                />
               </div>
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-primary hover:bg-primary/90 text-white text-lg font-semibold py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
-              >
-                {isLoading ? "Signing In..." : "Sign In"}
-              </button>
-            </form>
-
-            {/* Footer */}
-            <div className="mt-8 pt-6 border-t border-gray-200 text-center">
-              <p className="text-xs text-gray-500">REX Technologies</p>
-              <p className="text-xs text-gray-400 mt-1">Secure • Smart • Simple</p>
+              <div className="group border-b border-slate-200 focus-within:border-blue-600 transition-all">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 group-focus-within:text-blue-600">Access_Secret</span>
+                <input
+                  type="password"
+                  required
+                  className="w-full bg-transparent py-3 text-lg font-bold outline-none"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={(e) => handleChange("password", e.target.value)}
+                />
+              </div>
             </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-[#121212] active:scale-95 text-white py-5 flex items-center justify-center gap-4 transition-all duration-300"
+            >
+              <span className="text-[10px] font-black uppercase tracking-[0.3em]">
+                {isLoading ? "Validating..." : "Establish Connection"}
+              </span>
+              {!isLoading && <ChevronRight size={16} />}
+            </button>
+          </form>
+
+          <div className="mt-12 text-center">
+            <p className="text-[8px] font-black uppercase tracking-widest text-slate-300">
+              © 2025 Praesentix Secure Intelligence
+            </p>
           </div>
         </div>
-      </main>
+      </div>
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @media (min-width: 1024px) {
+          body, input, button { cursor: none !important; }
+        }
+        @keyframes scan-slow { 
+          0% { top: 0% } 
+          100% { top: 100% } 
+        }
+        .animate-scan-slow { 
+          animation: scan-slow 6s linear infinite; 
+        }
+        input::placeholder { color: #cbd5e1; font-weight: 400; font-size: 14px; }
+      `}} />
     </div>
   );
 };

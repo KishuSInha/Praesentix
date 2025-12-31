@@ -40,7 +40,7 @@ const Selection = () => {
             <div className="flex items-center space-x-3">
               <img src={govEmblem} alt="Government Emblem" className="w-10 h-10" />
               <div>
-                <h1 className="text-xl font-semibold">Upastithi Access Portal</h1>
+                <h1 className="text-xl font-semibold">Praesentix Access Portal</h1>
                 <p className="text-sm opacity-90">Choose your preferred access method</p>
               </div>
             </div>

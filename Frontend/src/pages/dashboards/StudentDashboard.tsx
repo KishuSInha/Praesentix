@@ -108,7 +108,7 @@ Class Rank,#${stats?.rank}`;
             </button>
             <div className="flex-1">
               <h1 className="text-xl font-semibold dark:text-white">Student Dashboard</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">REX - UpastithiCheck</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Praesentix</p>
             </div>
             <div className="flex items-center space-x-2">
               <NotificationCenter />

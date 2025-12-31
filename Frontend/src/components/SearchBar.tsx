@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Search, X, Filter } from 'lucide-react';
-import upastithiCheckLogo from '../assets/upasthiticheck-logo.png';
+import Praesentix from '../assets/Praesentix.png';
 
 interface SearchBarProps {
   placeholder?: string;
@@ -40,8 +40,8 @@ const SearchBar = ({ placeholder = "Search...", onSearch, filters = [] }: Search
       <div className="flex items-center space-x-2">
         <div className="relative flex-1">
           <img 
-            src={upastithiCheckLogo} 
-            alt="UpastithiCheck" 
+            src={Praesentix} 
+            alt="Praesentix" 
             className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 object-contain"
           />
           <input

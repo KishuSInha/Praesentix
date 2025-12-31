@@ -252,7 +252,7 @@ const EducationDashboard = () => {
               <BarChart3 className="w-7 h-7 text-white" />
             </div>
             <h2 className="text-lg font-bold text-foreground mb-1">{t(' Education Office, Punjab')}</h2>
-            <p className="text-sm text-muted-foreground">{t('Amritsar')}</p>
+            <p className="text-sm text-black">{t('Amritsar')}</p>
             <div className="mt-3 inline-flex items-center px-3 py-1.5 bg-background/20 rounded-full">
               <span className="text-xs font-medium">{t('Monitoring 5 Schools', { totalSchools: stats?.totalSchools })}</span>
             </div>

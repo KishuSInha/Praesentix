@@ -1,6 +1,6 @@
 {
-  "name": "UpastithiCheck - Smart Attendance Management",
-  "short_name": "UpastithiCheck",
+  "name": "Praesentix",
+  "short_name": "Praesentix",
   "description": "AI-powered attendance management system with face recognition by REX",
   "start_url": "/",
   "display": "standalone",

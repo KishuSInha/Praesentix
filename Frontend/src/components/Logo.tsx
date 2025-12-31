@@ -1,5 +1,4 @@
-import rexLogo from "../assets/rex-logo.png";
-import upastithiCheckLogo from "../assets/upasthiticheck-logo.png";
+import Praesentix from "../assets/Praesentix.png";
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
@@ -34,23 +33,15 @@ const Logo = ({ size = 'md', showText = true, variant = 'light' }: LogoProps) =>
     <div className="flex items-center space-x-3">
       <div className={`${sizeClasses[size]} w-auto flex items-center justify-center bg-white rounded-lg p-2 shadow-sm`}>
         <img 
-          src={upastithiCheckLogo} 
-          alt="UpastithiCheck Logo" 
+          src={Praesentix} 
+          alt="Praesentix" 
           className="h-full w-auto object-contain"
         />
       </div>
       {showText && (
         <div>
-          <h1 className={`${textSizes[size]} font-bold ${textColors[variant]}`}>UpastithiCheck</h1>
+          <h1 className={`${textSizes[size]} font-bold ${textColors[variant]}`}>Praesentix</h1>
           <div className="flex items-center space-x-2">
-            <p className={`text-sm ${subtextColors[variant]}`}>by</p>
-            <div className="bg-white rounded px-2 py-1">
-              <img 
-                src={rexLogo} 
-                alt="REX Logo" 
-                className="h-3 w-auto object-contain"
-              />
-            </div>
           </div>
         </div>
       )}

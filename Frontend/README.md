@@ -1,4 +1,4 @@
-# Upastithi - Government Attendance Management System
+# Praesentix- Attendance Management System
 
 An advanced digital attendance management system developed by REX Technologies for government institutions, featuring AI-powered face recognition, comprehensive analytics, and secure multi-role access.
 
@@ -186,6 +186,6 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Upastithi** - Developed by REX Technologies for Government of India 🇮🇳
+**Praesentix** - Developed by REX Technologies for Government of India 🇮🇳
 
 *Secure • Reliable • Government Approved*

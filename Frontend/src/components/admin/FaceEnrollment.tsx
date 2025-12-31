@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 
-const API_BASE_URL = 'http://localhost:5001';
+const API_BASE_URL = 'http://localhost:5002';
 
 export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
   const { t } = useTranslation();
@@ -30,15 +30,27 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
   
   // ... (insert all the functions from the previous correct answer here)
   const dataURLtoBlob = (dataUrl: string): Blob => {
-    const arr = dataUrl.split(',');
-    const mime = arr[0].match(/:(.*?);/)![1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
+    try {
+      // Remove data URL prefix if present
+      const base64String = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+      
+      // Decode base64 string
+      const byteString = atob(base64String);
+      
+      // Create array buffer
+      const arrayBuffer = new ArrayBuffer(byteString.length);
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      for (let i = 0; i < byteString.length; i++) {
+        uint8Array[i] = byteString.charCodeAt(i);
+      }
+      
+      // Return blob with JPEG mime type
+      return new Blob([uint8Array], { type: 'image/jpeg' });
+    } catch (error) {
+      console.error('Error converting data URL to blob:', error);
+      throw new Error('Failed to process image data');
     }
-    return new Blob([u8arr], { type: mime });
   };
 
   const startCamera = async () => {
@@ -59,8 +71,8 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
     } catch (error) {
       console.error('Error accessing camera:', error);
       toast({
-        title: t('enrollment.cameraError'),
-        description: t('enrollment.cameraErrorDesc'),
+        title: 'Camera Error',
+        description: 'Unable to access camera. Please check permissions.',
         variant: 'destructive',
       });
     }
@@ -102,8 +114,8 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
     
     // Show success toast
     toast({
-      title: t('enrollment.imageCapturedToast'),
-      description: `${t('enrollment.imagesCaptured', { count: capturedImages.length + 1 })}`,
+      title: 'Image Captured',
+      description: `${capturedImages.length + 1} image(s) captured successfully`,
     });
   };
 
@@ -112,8 +124,8 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
     
     if (capturedImages.length < 3) {
       toast({
-        title: t('enrollment.moreImagesNeeded'),
-        description: t('enrollment.moreImagesNeededDesc'),
+        title: 'More Images Needed',
+        description: 'Please capture at least 3 images for better accuracy',
         variant: 'destructive',
       });
       return;
@@ -121,8 +133,8 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
     
     if (!studentName || !studentId) {
       toast({
-        title: t('enrollment.missingInfo'),
-        description: t('enrollment.missingInfoDesc'),
+        title: 'Missing Information',
+        description: 'Please enter both student name and ID',
         variant: 'destructive',
       });
       return;
@@ -131,41 +143,59 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
     setIsSubmitting(true);
     
     try {
+      console.log('Starting enrollment for:', studentName, studentId);
+      console.log('Number of images:', capturedImages.length);
+      
       const formData = new FormData();
       formData.append('studentName', studentName);
       formData.append('studentId', studentId);
       
       // Add all captured images
       capturedImages.forEach((img, index) => {
-        const blob = dataURLtoBlob(img);
-        formData.append('images', blob, `image_${index}.jpg`);
+        try {
+          const blob = dataURLtoBlob(img);
+          console.log(`Image ${index + 1} blob size:`, blob.size, 'bytes');
+          formData.append('images', blob, `image_${index}.jpg`);
+        } catch (error) {
+          console.error(`Failed to process image ${index + 1}:`, error);
+          throw new Error(`Failed to process image ${index + 1}`);
+        }
       });
+      
+      console.log('Sending enrollment request to:', `${API_BASE_URL}/api/enroll-face`);
       
       const response = await fetch(`${API_BASE_URL}/api/enroll-face`, {
         method: 'POST',
         body: formData,
       });
       
-      if (!response.ok) {
-        throw new Error('Failed to enroll student');
+      console.log('Response status:', response.status);
+      
+      const result = await response.json();
+      console.log('Response data:', result);
+      
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to enroll student');
       }
       
       // Success
       toast({
-        title: t('enrollment.enrollSuccess'),
-        description: 'Student enrolled successfully!',
+        title: 'Enrollment Successful',
+        description: result.message || `${studentName} enrolled successfully!`,
       });
       
       // Reset form
       setStudentName('');
       setStudentId('');
       setCapturedImages([]);
+      stopCamera();
+      setIsEnrolling(false);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error enrolling student:', error);
       toast({
-        title: t('enrollment.enrollFailed'),
-        description: 'Failed to enroll student. Please try again.',
+        title: 'Enrollment Failed',
+        description: error.message || 'Failed to enroll student. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -195,13 +225,13 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-4">
           <Camera className="h-6 w-6 text-primary" />
         </div>
-        <h3 className="text-lg font-medium mb-2">{t('enrollment.title')}</h3>
+        <h3 className="text-lg font-medium mb-2">Face Enrollment</h3>
         <p className="text-sm text-muted-foreground mb-6">
-          {t('enrollment.description')}
+          Enroll student faces for AI-powered attendance recognition. Capture 3-5 images from different angles.
         </p>
         <Button onClick={startEnrollment}>
           <Camera className="mr-2 h-4 w-4" />
-          {t('enrollment.startButton')}
+          Start Enrollment
         </Button>
       </div>
     );
@@ -210,7 +240,7 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">{t('enrollment.header')}</h3>
+        <h3 className="text-lg font-medium">Face Enrollment</h3>
         <Button variant="ghost" size="sm" onClick={cancelEnrollment}>
           <X className="h-4 w-4" />
           <span className="sr-only">{t('enrollment.close')}</span>
@@ -247,9 +277,9 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
           </div>
           <div className="text-center text-sm text-muted-foreground">
             {capturedImages.length > 0 ? (
-              <p>{t('enrollment.imagesCaptured', { count: capturedImages.length })}</p>
+              <p className="text-green-600 font-medium">✓ {capturedImages.length} image(s) captured</p>
             ) : (
-              <p>{t('enrollment.cameraFrameHelper')}</p>
+              <p>Position your face in the frame and click the camera button</p>
             )}
           </div>
         </div>
@@ -259,41 +289,60 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-muted-foreground" />
-              <Label htmlFor="studentName">{t('enrollment.studentNameLabel')}</Label>
+              <Label htmlFor="studentName">Student Name</Label>
             </div>
             <Input
               id="studentName"
               value={studentName}
               onChange={(e) => setStudentName(e.target.value)}
-              placeholder={t('enrollment.studentNamePlaceholder')}
+              placeholder="Enter student full name"
               disabled={isSubmitting}
+              required
             />
           </div>
           
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Hash className="h-4 w-4 text-muted-foreground" />
-              <Label htmlFor="studentId">{t('enrollment.studentIdLabel')}</Label>
+              <Label htmlFor="studentId">Student ID / Roll Number</Label>
             </div>
             <Input
               id="studentId"
               value={studentId}
               onChange={(e) => setStudentId(e.target.value)}
-              placeholder={t('enrollment.studentIdPlaceholder')}
+              placeholder="Enter student ID or roll number"
               disabled={isSubmitting}
+              required
             />
           </div>
           
           <div className="space-y-2">
-            <p className="text-sm font-medium">{t('enrollment.capturedImagesHeader')}</p>
+            <p className="text-sm font-medium">Captured Images ({capturedImages.length}/5)</p>
             {capturedImages.length > 0 ? (
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                {/* ... mapping over capturedImages */}
+                {capturedImages.map((img, index) => (
+                  <div key={index} className="relative aspect-square rounded-md overflow-hidden border-2 border-green-500">
+                    <img src={img} alt={`Capture ${index + 1}`} className="w-full h-full object-cover" />
+                    <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                      {index + 1}
+                    </div>
+                    <button
+                      onClick={() => setCapturedImages(prev => prev.filter((_, i) => i !== index))}
+                      className="absolute top-1 left-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-600"
+                      disabled={isSubmitting}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="border-2 border-dashed rounded-md p-4 text-center text-muted-foreground">
-                <p className="text-sm">{t('enrollment.noImagesCaptured')}</p>
+                <p className="text-sm">No images captured yet. Click the camera button to capture.</p>
               </div>
+            )}
+            {capturedImages.length < 3 && (
+              <p className="text-xs text-orange-600">⚠️ Minimum 3 images required (5 recommended for better accuracy)</p>
             )}
           </div>
           
@@ -306,12 +355,12 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t('enrollment.enrollingButton')}
+                  Enrolling...
                 </>
               ) : (
                 <>
                   <Check className="mr-2 h-4 w-4" />
-                  {t('enrollment.completeButton')}
+                  Complete Enrollment
                 </>
               )}
             </Button>

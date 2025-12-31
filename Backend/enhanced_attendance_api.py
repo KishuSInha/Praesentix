@@ -349,5 +349,37 @@ def export_period_attendance():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/enroll-face', methods=['POST', 'OPTIONS'])
+def enroll_face():
+    if request.method == 'OPTIONS':
+        return '', 204
+    
+    try:
+        student_name = request.form.get('studentName')
+        student_id = request.form.get('studentId')
+        images = request.files.getlist('images')
+        
+        if not student_name or not student_id:
+            return jsonify({'success': False, 'message': 'Missing student information'}), 400
+        
+        if len(images) < 3:
+            return jsonify({'success': False, 'message': 'At least 3 images required'}), 400
+        
+        # Save images to known_faces directory
+        student_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'known_faces', f'{student_name}_{student_id}')
+        os.makedirs(student_folder, exist_ok=True)
+        
+        for i, image in enumerate(images):
+            image_path = os.path.join(student_folder, f'{student_id}_{i}.jpg')
+            image.save(image_path)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully enrolled {student_name} with {len(images)} images'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, port=5002)

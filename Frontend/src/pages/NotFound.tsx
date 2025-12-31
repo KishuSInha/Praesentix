@@ -63,7 +63,7 @@ const NotFound = () => {
           {/* Footer */}
           <div className="mt-8 text-center text-gray-500 text-sm">
             <p>If you believe this is an error, please contact support</p>
-            <p className="mt-2">REX - UpastithiCheck</p>
+            <p className="mt-2">Praesentix</p>
           </div>
         </div>
       </div>

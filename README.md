@@ -1,4 +1,4 @@
-# UpastithiCheck - Smart Attendance Management System
+# Praesentix - Smart Attendance Management System
 
 > A modern, AI-powered attendance management system built by REX for educational institutions
 
@@ -22,11 +22,11 @@
 
 ## 🎯 About
 
-UpastithiCheck is a comprehensive attendance management solution that combines traditional manual entry with cutting-edge AI-powered face recognition technology. Built from the ground up to solve real-world attendance tracking challenges in educational institutions, it offers a seamless experience for students, teachers, and administrators.
+Praesentix is a comprehensive attendance management solution that combines traditional manual entry with cutting-edge AI-powered face recognition technology. Built from the ground up to solve real-world attendance tracking challenges in educational institutions, it offers a seamless experience for students, teachers, and administrators.
 
-### Why UpastithiCheck?
+### Why Praesentix?
 
-Traditional attendance systems are time-consuming and prone to errors. We built UpastithiCheck to:
+Traditional attendance systems are time-consuming and prone to errors. We built Praesentix to:
 - **Save Time**: Automated face recognition reduces attendance marking time by 80%
 - **Increase Accuracy**: AI-powered anti-spoofing ensures genuine attendance
 - **Provide Insights**: Real-time analytics help identify attendance patterns
@@ -409,7 +409,7 @@ Need help? We're here for you!
 
 <div align="center">
 
-**UpastithiCheck** - Smart Attendance, Simplified
+**Praesentix** - Smart Attendance, Simplified
 
 Made with ❤️ by [REX](https://rex.com)
 

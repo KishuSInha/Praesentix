@@ -301,7 +301,7 @@ const CameraAttendance = () => {
               <img src={govEmblem} alt="Government Emblem" className="w-10 h-10" />
               <div>
                 <h1 className="text-xl font-semibold">Face Recognition Attendance</h1>
-                <p className="text-sm opacity-90">Upastithi - AI-Powered Attendance System</p>
+                <p className="text-sm opacity-90">Praesentix - AI-Powered Attendance System</p>
               </div>
             </div>
           </div>

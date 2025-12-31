@@ -162,7 +162,7 @@ const ManualAttendance = () => {
               <img src={govEmblem} alt="Government Emblem" className="w-10 h-10" />
               <div>
                 <h1 className="text-xl font-semibold">Manual Attendance Entry</h1>
-                <p className="text-sm opacity-90">Upastithi - Government Attendance System</p>
+                <p className="text-sm opacity-90">Praesentix</p>
               </div>
             </div>
           </div>
