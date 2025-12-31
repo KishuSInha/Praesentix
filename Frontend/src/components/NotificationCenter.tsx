@@ -37,7 +37,7 @@ const NotificationCenter = () => {
 
   const markAsRead = async (id: number) => {
     try {
-      await fetch(`${API_URL}/api/notifications`), {
+      await fetch(`${API_URL}/api/notifications`, {
         method: 'PUT'
       });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: 1 } : n));
