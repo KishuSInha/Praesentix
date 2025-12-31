@@ -46,26 +46,50 @@ MODEL_NAME = 'ArcFace'
 
 app = Flask(__name__)
 
-# Enhanced CORS configuration
-CORS(app, resources={
-    r"/*": {
-        "origins": ["https://praesentix-ty5d.vercel.app", "http://localhost:5173"],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
-        "supports_credentials": True,
-        "max_age": 3600
-    }
-})
+# Simplified but robust CORS
+CORS(app, supports_credentials=True)
+
+@app.before_request
+def log_request_info():
+    """Log details about every incoming request."""
+    if request.path == '/health': return # Skip logging for frequent health checks
+    print(f"[DEBUG] Request: {request.method} {request.path}", flush=True)
+    # Only log headers for non-options to reduce noise
+    if request.method != 'OPTIONS':
+        # Selectively log important headers
+        important_headers = {k: v for k, v in request.headers.items() if k.lower() in ['origin', 'referer', 'content-type']}
+        print(f"[DEBUG] Headers: {important_headers}", flush=True)
+
+@app.after_request
+def log_response_info(response):
+    """Log details about every outgoing response."""
+    if request.path == '/health': return
+    origin = response.headers.get('Access-Control-Allow-Origin')
+    print(f"[DEBUG] Response: {response.status_code} - CORS Origin: {origin}", flush=True)
+    return response
 
 @app.route('/')
+def index():
+    return jsonify({"status": "Server running", "info": "Use /api/warmup to pre-load models"})
+
+@app.route('/health')
 def health_check():
-    """Simple health check for Render/Deployment verification."""
-    return jsonify({
-        'status': 'Server running',
-        'timestamp': datetime.now().isoformat(),
-        'environment': os.environ.get('FLASK_ENV', 'production'),
-        'cors_allowed': 'https://praesentix-ty5d.vercel.app'
-    })
+    return "OK", 200
+
+@app.route('/api/warmup')
+def warmup():
+    """Trigger DeepFace model loading to avoid timeout on first real request."""
+    print("[DEBUG] Warmup started: Pre-loading DeepFace components...", flush=True)
+    try:
+        # Create a dummy image to trigger internal lazy loading
+        dummy_img = np.zeros((224, 224, 3), dtype=np.uint8)
+        # Just call represent with enforce_detection=False
+        DeepFace.represent(dummy_img, model_name=MODEL_NAME, enforce_detection=False, detector_backend='opencv')
+        print("[DEBUG] Warmup successful!", flush=True)
+        return jsonify({'success': True, 'message': 'Models warmed up and ready'})
+    except Exception as e:
+        print(f"[ERROR] Warmup failed: {str(e)}", flush=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 # Database configuration
 # Removed Flask-SQLAlchemy config
@@ -375,7 +399,10 @@ def get_notifications():
         })
         
     except Exception as e:
+        print(f"[ERROR] Error fetching notifications: {str(e)}", flush=True)
         return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
 
 @app.route('/api/notifications/<int:notification_id>/read', methods=['PUT'])
 def mark_notification_read(notification_id):
