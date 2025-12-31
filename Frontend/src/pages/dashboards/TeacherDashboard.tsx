@@ -6,6 +6,7 @@ import PeriodAttendanceManager from "../../components/PeriodAttendanceManager";
 import LoadingSkeleton from "../../components/LoadingSkeleton";
 import SearchBar from "../../components/SearchBar";
 import NotificationCenter from "../../components/NotificationCenter";
+import Logo from "../../components/Logo";
 
 interface TeacherStats {
   totalClasses: number;
@@ -91,9 +92,11 @@ const TeacherDashboard = () => {
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="flex-1">
-              <h1 className="text-xl font-semibold">Teacher Dashboard</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Praesentix</p>
+            <div className="flex-1 flex items-center gap-4">
+              <Logo size="sm" showText={false} />
+              <div>
+                <h1 className="text-xl font-semibold">Teacher Dashboard</h1>
+              </div>
             </div>
             <div className="flex items-center space-x-2">
               <NotificationCenter />

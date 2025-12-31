@@ -4,6 +4,7 @@ import { ArrowLeft, School, Users, TrendingDown, BarChart3, Download, Search, Ey
 import { mockAPI, School as SchoolType } from "../../utils/mockData";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTranslation } from 'react-i18next';
+import Logo from "../../components/Logo";
 
 // Use SchoolType directly since we've made all properties optional in the base interface
 type ExtendedSchoolType = SchoolType;
@@ -243,9 +244,12 @@ const EducationDashboard = () => {
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <div>
-              <h1 className="text-lg font-semibold">{t('Education Dashboard')}</h1>
-              <p className="text-xs text-muted-foreground">{t('Key performance metrics for schools in the Amritsar District')}</p>
+            <div className="flex items-center gap-4">
+              <Logo size="sm" showText={false} />
+              <div>
+                <h1 className="text-lg font-semibold">{t('Education Dashboard')}</h1>
+                <p className="text-xs text-muted-foreground">{t('Key performance metrics for schools in the Amritsar District')}</p>
+              </div>
             </div>
           </div>
         </div>

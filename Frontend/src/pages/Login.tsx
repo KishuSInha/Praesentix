@@ -105,12 +105,15 @@ const Login = () => {
       {/* RIGHT SIDE: THE FORM */}
       <div className="flex-1 bg-white p-6 md:p-24 flex flex-col justify-center relative min-h-screen lg:min-h-0">
         <div className="max-w-md w-full mx-auto">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-black transition-colors mb-10"
-          >
-            <ArrowLeft size={14} /> System Exit
-          </button>
+          <div className="flex items-center justify-between mb-10">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-black transition-colors"
+            >
+              <ArrowLeft size={14} /> System Exit
+            </button>
+            <Logo size="sm" showText={true} />
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-10">
             <div className="space-y-3">

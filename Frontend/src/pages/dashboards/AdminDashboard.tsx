@@ -6,6 +6,7 @@ import { FaceEnrollment } from "../../components/admin/FaceEnrollment";
 import LoadingSkeleton from "../../components/LoadingSkeleton";
 import SystemHealth from "../../components/SystemHealth";
 import NotificationCenter from "../../components/NotificationCenter";
+import Logo from "../../components/Logo";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 
 interface AdminStats {
@@ -68,9 +69,11 @@ const AdminDashboard = () => {
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="flex-1">
-              <h1 className="text-xl font-semibold dark:text-white">Admin Dashboard</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Praesentix</p>
+            <div className="flex-1 flex items-center gap-4">
+              <Logo size="sm" showText={false} />
+              <div>
+                <h1 className="text-xl font-semibold dark:text-white">Admin Dashboard</h1>
+              </div>
             </div>
             <div className="flex items-center space-x-2">
               <NotificationCenter />

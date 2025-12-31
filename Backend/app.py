@@ -440,7 +440,19 @@ def recognize_face():
             if image is None:
                 print("[ERROR] Failed to decode image", flush=True)
                 return jsonify({'success': False, 'message': 'Failed to decode image'}), 400
-            print(f"[DEBUG] Image decoded successfully: {image.shape}", flush=True)
+            
+            # Downscale image if it's too large to save memory during DeepFace processing
+            max_dim = 640
+            h, w = image.shape[:2]
+            if max(h, w) > max_dim:
+                scale = max_dim / max(h, w)
+                new_w, new_h = int(w * scale), int(h * scale)
+                image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                print(f"[DEBUG] Resized image to: {image.shape}", flush=True)
+            else:
+                print(f"[DEBUG] Image dimensions OK: {image.shape}", flush=True)
+                
+            print(f"[DEBUG] Image ready for processing", flush=True)
         except Exception as e:
             print(f"[ERROR] Image decode error: {str(e)}", flush=True)
             return jsonify({'success': False, 'message': f'Image decode error: {str(e)}'}), 400
@@ -759,7 +771,7 @@ def enroll_face():
         
         # Extract real face encodings from uploaded images using DeepFace
         all_encodings = []
-        for image_file in images:
+        for i, image_file in enumerate(images):
             # Read image data
             image_bytes = image_file.read()
             nparr = np.frombuffer(image_bytes, np.uint8)
@@ -767,6 +779,13 @@ def enroll_face():
             
             if image is None:
                 continue
+            
+            # Downscale for efficiency
+            max_dim = 640
+            h, w = image.shape[:2]
+            if max(h, w) > max_dim:
+                scale = max_dim / max(h, w)
+                image = cv2.resize(image, (int(w*scale), int(h*scale)), interpolation=cv2.INTER_AREA)
             
             # Get face encoding from image
             print(f"[DEBUG] Enrolling: Processing image {i+1}...", flush=True)

@@ -1,12 +1,15 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  User, Camera, Shield, BarChart3, ArrowUpRight, 
-  Twitter, Linkedin, Github 
+import { motion } from "framer-motion";
+import {
+  User, Camera, Shield, BarChart3, ArrowUpRight,
+  Twitter, Linkedin, Github
 } from "lucide-react";
 
 import Logo from "../components/Logo";
 import NotificationCenter from "../components/NotificationCenter";
+
+// Assets
 import founderImage from "../assets/founder.jpeg";
 import founder2Image from "../assets/founder2.jpeg";
 import cofounderImage from "../assets/cofounder.webp";
@@ -30,23 +33,29 @@ const Landing = () => {
     document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const teamMembers = [
-    { name: "Utkarsh Sinha", role: "Founder", img: founderImage },
-    { name: "Soumya Sagar Nayak", role: "Co-Founder", img: founder2Image },
-    { name: "Avijit Choudhary", role: "Co-Founder", img: cofounderImage },
-    { name: "Subham Sarangi", role: "Chief AI Architect", img: subhamImage },
+  const reviews = [
+    { id: "01", name: "Utkarsh Sinha", role: "3rd Year • CS Engineering", img: founderImage, review: "The neural matching accuracy is incredible. It handles my early morning 'just woke up' face perfectly during 8 AM lectures." },
+    { id: "02", name: "Soumya Sagar", role: "Final Year • IT & Systems", img: founder2Image, review: "Finally, an attendance system that doesn't feel like a chore. Sub-second verification is a total game changer for our lab entries." },
+    { id: "03", name: "Avijit Choudhary", role: "2nd Year • Design & Media", img: cofounderImage, review: "As a design student, I appreciate the UI. It’s rare to see college software that actually looks and feels like it belongs in 2025." },
+    { id: "04", name: "Subham Sarangi", role: "3rd Year • Applied Math", img: subhamImage, review: "The backend stability is what impresses me most. No lag, no false negatives—just seamless data logging every single day." },
   ];
 
   return (
     <div className="min-h-screen bg-[#fafafa] text-[#121212] font-sans selection:bg-blue-600 selection:text-white overflow-x-hidden">
-      
+
       {/* Custom Magnetic Cursor */}
-      <div 
-        className={`fixed pointer-events-none z-[9999] w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold uppercase tracking-tighter transition-transform duration-300 ease-out mix-blend-difference ${isHoveringHero ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}`}
-        style={{ left: mousePos.x - 48, top: mousePos.y - 48 }}
+      <motion.div
+        className="fixed pointer-events-none z-[9999] w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold uppercase tracking-tighter mix-blend-difference"
+        animate={{
+          left: mousePos.x - 48,
+          top: mousePos.y - 48,
+          scale: isHoveringHero ? 1 : 0,
+          opacity: isHoveringHero ? 1 : 0
+        }}
+        transition={{ type: "spring", stiffness: 250, damping: 25, mass: 0.5 }}
       >
         Enter App
-      </div>
+      </motion.div>
 
       {/* UFO Style Navigation */}
       <nav className="fixed top-0 w-full z-50 px-6 py-8 flex justify-between items-center mix-blend-difference text-white">
@@ -54,7 +63,7 @@ const Landing = () => {
         <div className="flex items-center gap-8">
           <button onClick={scrollToFeatures} className="hidden md:block text-[10px] font-bold uppercase tracking-[0.2em] hover:opacity-50 transition-opacity">Features</button>
           <NotificationCenter />
-          <button 
+          <button
             onClick={() => navigate("/login")}
             className="bg-white text-black px-5 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all"
           >
@@ -64,7 +73,7 @@ const Landing = () => {
       </nav>
 
       {/* HERO SECTION */}
-      <section 
+      <section
         ref={heroRef}
         onMouseEnter={() => setIsHoveringHero(true)}
         onMouseLeave={() => setIsHoveringHero(false)}
@@ -75,7 +84,7 @@ const Landing = () => {
             <h1 className="text-[14vw] leading-[0.8] font-black tracking-tighter uppercase mb-8">
               Praesentix<span className="text-blue-600">.</span>
             </h1>
-            
+
             <div className="grid md:grid-cols-3 gap-12 border-t border-black pt-10">
               <div className="col-span-1 border-r border-black/5 md:pr-10">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600">[ 01 — Mission ]</span>
@@ -90,9 +99,9 @@ const Landing = () => {
                 </p>
               </div>
               <div className="col-span-1 flex md:justify-end items-end">
-                <button 
-                   onClick={() => navigate("/login")}
-                   className="flex items-center gap-2 group text-2xl font-bold tracking-tighter uppercase border-b-2 border-black pb-1 hover:text-blue-600 hover:border-blue-600 transition-all"
+                <button
+                  onClick={() => navigate("/login")}
+                  className="flex items-center gap-2 group text-2xl font-bold tracking-tighter uppercase border-b-2 border-black pb-1 hover:text-blue-600 hover:border-blue-600 transition-all"
                 >
                   Start Scanning <ArrowUpRight className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                 </button>
@@ -102,8 +111,8 @@ const Landing = () => {
 
           <div className="relative w-full h-[70vh] bg-slate-200 overflow-hidden cursor-none group">
             <div className="absolute inset-0 bg-blue-900/10 z-10 mix-blend-overlay" />
-            <img 
-              src="https://images.unsplash.com/photo-1507146153580-69a1fe6d8aa1?auto=format&fit=crop&q=80" 
+            <img
+              src="https://images.unsplash.com/photo-1507146153580-69a1fe6d8aa1?auto=format&fit=crop&q=80"
               className="w-full h-full object-cover grayscale brightness-75 group-hover:grayscale-0 group-hover:scale-105 transition-all duration-[2s] ease-out"
               alt="AI Technology"
             />
@@ -118,10 +127,10 @@ const Landing = () => {
       <section id="features" className="py-24 px-6 bg-white">
         <div className="container mx-auto">
           <div className="flex justify-between items-end mb-20">
-            <h2 className="text-6xl font-black uppercase tracking-tighter leading-none">Core<br/>Utilities</h2>
+            <h2 className="text-6xl font-black uppercase tracking-tighter leading-none">Core<br />Utilities</h2>
             <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest underline decoration-blue-600 underline-offset-8">Scroll to Explore</p>
           </div>
-          
+
           <div className="grid md:grid-cols-2 lg:grid-cols-4 border-t border-l border-black">
             {[
               { icon: User, title: "Manual Entry", desc: "For legacy environments and overrides." },
@@ -139,23 +148,60 @@ const Landing = () => {
         </div>
       </section>
 
-      {/* TEAM SECTION */}
-      <section className="py-24 px-6 bg-[#121212] text-white">
+      {/* REVIEWS SECTION - (Replacing Architect Section) */}
+      <section className="py-32 px-6 bg-[#121212] text-white">
         <div className="container mx-auto">
-          <h2 className="text-[8vw] font-black uppercase tracking-tighter leading-none mb-20 italic">Architects</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1">
-            {teamMembers.map((member, idx) => (
-              <div key={idx} className="relative group overflow-hidden bg-slate-800 aspect-[3/4]">
-                <img 
-                  src={member.img} 
-                  className="w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700" 
-                  alt={member.name} 
-                />
-                <div className="absolute bottom-0 left-0 p-6 w-full bg-gradient-to-t from-black to-transparent">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-blue-500 mb-1">{member.role}</p>
-                  <h4 className="text-xl font-bold uppercase tracking-tighter">{member.name}</h4>
+          <div className="mb-20">
+            <h2 className="text-[8vw] font-black uppercase tracking-tighter leading-none italic mb-4">Verified<br />Sentiments</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1">
+            {reviews.map((item, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 50 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.1, duration: 0.8 }}
+                viewport={{ once: true }}
+                className="group relative bg-[#1a1a1a] border border-white/5 p-8 flex flex-col justify-between min-h-[500px] hover:bg-blue-600 transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]"
+              >
+                <div className="z-10">
+                  <div className="flex justify-between items-start mb-8">
+                    <span className="text-[10px] font-black text-white/30 group-hover:text-white/60 tracking-widest">{item.id}</span>
+                    <ArrowUpRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <h3 className="text-3xl font-black uppercase tracking-tighter leading-none mb-2 group-hover:translate-x-2 transition-transform duration-500">
+                    {item.name}
+                  </h3>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600 group-hover:text-white/80 transition-colors">
+                    {item.role}
+                  </p>
                 </div>
-              </div>
+
+                <div className="relative my-10 z-10 flex justify-center">
+                  <div className="relative w-32 h-32 md:w-40 md:h-40">
+                    <div className="absolute inset-0 bg-blue-600 rounded-[2rem] blur-2xl opacity-0 group-hover:opacity-40 transition-opacity duration-500" />
+                    <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden border-2 border-white/10 group-hover:border-white transition-all duration-500 shadow-2xl">
+                      <img
+                        src={item.img}
+                        alt={item.name}
+                        className="w-full h-full object-cover grayscale group-hover:grayscale-0 scale-110 group-hover:scale-100 transition-all duration-700"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="z-10 mt-auto">
+                  <p className="text-sm font-medium leading-relaxed text-slate-400 group-hover:text-white transition-colors italic">
+                    "{item.review}"
+                  </p>
+                </div>
+
+                {/* Background Decoration */}
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Logo size="sm" variant="dark" showText={false} />
+                </div>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -170,11 +216,11 @@ const Landing = () => {
             </h2>
             <div className="flex flex-col md:flex-row justify-between items-center md:items-end mt-[-4vw] gap-12">
               <p className="text-3xl md:text-5xl font-black tracking-tighter max-w-xl leading-[0.9] uppercase text-center md:text-left">
-                Ready to automate your <br/>
+                Ready to automate your <br />
                 <span className="text-blue-500 italic underline underline-offset-[12px] decoration-1">presence?</span>
               </p>
-              
-              <button 
+
+              <button
                 onClick={() => navigate("/login")}
                 className="relative group flex items-center justify-center bg-blue-600 hover:bg-white text-white hover:text-black w-48 h-48 md:w-56 md:h-56 rounded-full transition-all duration-700 transform hover:scale-105"
               >
@@ -222,7 +268,7 @@ const Landing = () => {
                 <p className="text-sm font-black uppercase tracking-tighter">Operational</p>
               </div>
               <p className="text-[10px] font-bold text-slate-500 leading-relaxed uppercase tracking-widest">
-                Node: ASIA-SOUTH-1<br/> Latency: 14ms
+                Node: ASIA-SOUTH-1<br /> Latency: 14ms
               </p>
             </div>
 
@@ -245,30 +291,31 @@ const Landing = () => {
           {/* FINAL REFINED LOGO SECTION */}
           <div className="border-t border-white/5 pt-12 flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-6 group">
-               <div className="bg-white p-2 rounded-lg group-hover:bg-blue-600 transition-colors duration-500">
-                  <Logo size="sm" variant="dark" showText={false} />
-               </div>
-               <div className="flex flex-col">
-                  <span className="text-lg font-black uppercase tracking-tighter leading-none group-hover:text-blue-500 transition-colors">Praesentix</span>
-                  <span className="text-[9px] text-slate-600 uppercase tracking-[0.3em] font-black">© 2025 Secure Intelligence</span>
-               </div>
+              <div className="bg-white p-2 rounded-lg group-hover:bg-blue-600 transition-colors duration-500">
+                <Logo size="sm" variant="dark" showText={false} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-lg font-black uppercase tracking-tighter leading-none group-hover:text-blue-500 transition-colors">Praesentix</span>
+                <span className="text-[9px] text-slate-600 uppercase tracking-[0.3em] font-black">© 2025 Secure Intelligence</span>
+              </div>
             </div>
-            
+
             <div className="hidden md:flex flex-1 max-w-md gap-8 overflow-hidden whitespace-nowrap opacity-10 grayscale">
-                <div className="animate-marquee inline-block">
-                    <span className="text-[9px] font-black uppercase tracking-[0.5em] mx-8 italic">Verified Presence</span>
-                    <span className="text-[9px] font-black uppercase tracking-[0.5em] mx-8 italic">Neural Matching</span>
-                </div>
-                <div className="animate-marquee inline-block">
-                    <span className="text-[9px] font-black uppercase tracking-[0.5em] mx-8 italic">Verified Presence</span>
-                    <span className="text-[9px] font-black uppercase tracking-[0.5em] mx-8 italic">Neural Matching</span>
-                </div>
+              <div className="animate-marquee inline-block">
+                <span className="text-[9px] font-black uppercase tracking-[0.5em] mx-8 italic">Verified Presence</span>
+                <span className="text-[9px] font-black uppercase tracking-[0.5em] mx-8 italic">Neural Matching</span>
+              </div>
+              <div className="animate-marquee inline-block">
+                <span className="text-[9px] font-black uppercase tracking-[0.5em] mx-8 italic">Verified Presence</span>
+                <span className="text-[9px] font-black uppercase tracking-[0.5em] mx-8 italic">Neural Matching</span>
+              </div>
             </div>
           </div>
         </div>
       </footer>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         @keyframes scan { 0% { top: 0% } 100% { top: 100% } }
         .animate-marquee { display: inline-block; animation: marquee 30s linear infinite; }
