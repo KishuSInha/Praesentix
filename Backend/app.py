@@ -128,7 +128,7 @@ def get_face_encodings_from_image(image):
             img_path=image,
             model_name=MODEL_NAME,
             enforce_detection=True,
-            detector_backend='ssd' # ssd is more robust for multiple faces than opencv
+            detector_backend='opencv' # opencv is much lighter/faster than ssd, better for low-mem environments
         )
         
         encodings = [np.array(res['embedding']) for res in results]
@@ -406,21 +406,29 @@ def recognize_face():
         
         # Decode base64 image
         try:
+            print(f"[DEBUG] Decoding image... size: {len(data['image'])} bytes", flush=True)
             image_data = base64.b64decode(data['image'])
             nparr = np.frombuffer(image_data, np.uint8)
             image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if image is None:
+                print("[ERROR] Failed to decode image", flush=True)
                 return jsonify({'success': False, 'message': 'Failed to decode image'}), 400
+            print(f"[DEBUG] Image decoded successfully: {image.shape}", flush=True)
         except Exception as e:
+            print(f"[ERROR] Image decode error: {str(e)}", flush=True)
             return jsonify({'success': False, 'message': f'Image decode error: {str(e)}'}), 400
         
         # Load known face encodings from database
         db = get_db_session()
         try:
+            print("[DEBUG] Loading all face encodings from DB...", flush=True)
             known_encodings = load_all_face_encodings(db)
+            print(f"[DEBUG] Loaded {len(known_encodings)} encodings", flush=True)
             
             # Get face encodings from the input image using DeepFace
+            print("[DEBUG] Calling DeepFace.represent...", flush=True)
             face_encodings = get_face_encodings_from_image(image)
+            print(f"[DEBUG] DeepFace.represent returned {len(face_encodings) if face_encodings else 0} faces", flush=True)
             
             if not face_encodings:
                 return jsonify({
@@ -734,6 +742,7 @@ def enroll_face():
                 continue
             
             # Get face encoding from image
+            print(f"[DEBUG] Enrolling: Processing image {i+1}...", flush=True)
             encodings = get_face_encodings_from_image(image)
             if encodings:
                 all_encodings.append(encodings[0])  # Take first face
