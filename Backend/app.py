@@ -4,11 +4,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Disable oneDNN optimizations to prevent SegFault on macOS with TF
+# Disable oneDNN optimizations and FORCE CPU-ONLY for Render
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 import json
 import base64
+import gc
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -559,11 +561,13 @@ def recognize_face():
             'message': f'Detected {len(detected_faces)} face(s), recognized {recognized_count}',
             'detectedFaces': detected_faces
         })
-        
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        # Manual garbage collection to prevent OOM
+        gc.collect()
 
 @app.route('/api/mark-attendance', methods=['POST', 'OPTIONS'])
 def mark_attendance_endpoint():
@@ -849,13 +853,13 @@ def enroll_face():
             'success': True,
             'message': f'Successfully enrolled {student_name} (ID: {student_id}) with {len(all_encodings)} face encodings (Model: {MODEL_NAME})'
         })
-        
-
-        
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Enrollment failed: {str(e)}'}), 500
+    finally:
+        # Manual garbage collection to prevent OOM
+        gc.collect()
 
 @app.route('/api/education/stats', methods=['GET', 'OPTIONS'])
 def get_education_stats():
