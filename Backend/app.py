@@ -46,8 +46,12 @@ MODEL_NAME = 'ArcFace'
 
 app = Flask(__name__)
 
-# Simplified but robust CORS
-CORS(app, supports_credentials=True)
+# ✅ GLOBAL CORS — applies to ALL routes
+CORS(
+    app,
+    resources={r"/api/*": {"origins": "https://praesentix-ty5d.vercel.app"}},
+    supports_credentials=True
+)
 
 @app.before_request
 def log_request_info():
@@ -60,12 +64,13 @@ def log_request_info():
         important_headers = {k: v for k, v in request.headers.items() if k.lower() in ['origin', 'referer', 'content-type']}
         print(f"[DEBUG] Headers: {important_headers}", flush=True)
 
+# ✅ FORCE headers on EVERY response (critical for Gunicorn)
 @app.after_request
-def log_response_info(response):
-    """Log details about every outgoing response."""
-    if request.path == '/health': return
-    origin = response.headers.get('Access-Control-Allow-Origin')
-    print(f"[DEBUG] Response: {response.status_code} - CORS Origin: {origin}", flush=True)
+def after_request(response):
+    response.headers["Access-Control-Allow-Origin"] = "https://praesentix-ty5d.vercel.app"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
 @app.route('/')
@@ -76,7 +81,7 @@ def index():
 def health_check():
     return "OK", 200
 
-@app.route('/api/warmup')
+@app.route('/api/warmup', methods=['GET', 'OPTIONS'])
 def warmup():
     """Trigger DeepFace model loading to avoid timeout on first real request."""
     print("[DEBUG] Warmup started: Pre-loading DeepFace components...", flush=True)
@@ -224,7 +229,7 @@ def parse_person_id(person_id):
 # ===== End Face Recognition Helper Functions =====
 
 
-@app.route('/api/student/<student_id>/attendance', methods=['GET'])
+@app.route('/api/student/<student_id>/attendance', methods=['GET', 'OPTIONS'])
 def get_student_attendance(student_id):
     db = get_db_session()
     try:
@@ -289,7 +294,7 @@ def get_student_attendance(student_id):
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/student/<student_id>/calendar', methods=['GET'])
+@app.route('/api/student/<student_id>/calendar', methods=['GET', 'OPTIONS'])
 def get_student_calendar(student_id):
     db = get_db_session()
     try:
@@ -317,7 +322,7 @@ def get_student_calendar(student_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/student/<student_id>/analytics', methods=['GET'])
+@app.route('/api/student/<student_id>/analytics', methods=['GET', 'OPTIONS'])
 def get_student_analytics(student_id):
     db = get_db_session()
     try:
@@ -380,7 +385,7 @@ def get_student_analytics(student_id):
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/notifications', methods=['GET'])
+@app.route('/api/notifications', methods=['GET', 'OPTIONS'])
 def get_notifications():
     db = get_db_session()
     try:
@@ -404,7 +409,7 @@ def get_notifications():
     finally:
         db.close()
 
-@app.route('/api/notifications/<int:notification_id>/read', methods=['PUT'])
+@app.route('/api/notifications/<int:notification_id>/read', methods=['PUT', 'OPTIONS'])
 def mark_notification_read(notification_id):
     db = get_db_session()
     try:
@@ -419,7 +424,7 @@ def mark_notification_read(notification_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/recognize', methods=['POST'])
+@app.route('/api/recognize', methods=['POST', 'OPTIONS'])
 def recognize_face():
     
     try:
@@ -543,7 +548,7 @@ def recognize_face():
         traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@app.route('/api/mark-attendance', methods=['POST'])
+@app.route('/api/mark-attendance', methods=['POST', 'OPTIONS'])
 def mark_attendance_endpoint():
     
     try:
@@ -573,7 +578,7 @@ def mark_attendance_endpoint():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@app.route('/api/period-attendance', methods=['GET'])
+@app.route('/api/period-attendance', methods=['GET', 'OPTIONS'])
 def get_period_attendance_api():
     try:
         date_str = request.args.get('date')
@@ -606,7 +611,7 @@ def get_period_attendance_api():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/teacher/stats', methods=['GET'])
+@app.route('/api/teacher/stats', methods=['GET', 'OPTIONS'])
 def get_teacher_stats():
     db = get_db_session()
     try:
@@ -638,7 +643,7 @@ def get_teacher_stats():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/login', methods=['POST'])
+@app.route('/api/login', methods=['POST', 'OPTIONS'])
 def login():
     db = get_db_session()
     try:
@@ -674,7 +679,7 @@ def login():
     finally:
         db.close()
 
-@app.route('/api/student/<student_id>/stats', methods=['GET'])
+@app.route('/api/student/<student_id>/stats', methods=['GET', 'OPTIONS'])
 def get_student_stats(student_id):
     db = get_db_session()
     try:
@@ -702,7 +707,7 @@ def get_student_stats(student_id):
     finally:
         db.close()
 
-@app.route('/api/admin/stats', methods=['GET'])
+@app.route('/api/admin/stats', methods=['GET', 'OPTIONS'])
 def get_admin_stats():
     db = get_db_session()
     try:
@@ -736,7 +741,7 @@ def get_admin_stats():
     finally:
         db.close()
 
-@app.route('/api/period-attendance/export', methods=['GET'])
+@app.route('/api/period-attendance/export', methods=['GET', 'OPTIONS'])
 def export_period_attendance():
     try:
         date_str = request.args.get('date')
@@ -755,7 +760,7 @@ def export_period_attendance():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/enroll-face', methods=['POST'])
+@app.route('/api/enroll-face', methods=['POST', 'OPTIONS'])
 def enroll_face():
     
     try:
@@ -835,7 +840,7 @@ def enroll_face():
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Enrollment failed: {str(e)}'}), 500
 
-@app.route('/api/education/stats', methods=['GET'])
+@app.route('/api/education/stats', methods=['GET', 'OPTIONS'])
 def get_education_stats():
     db = get_db_session()
     try:
