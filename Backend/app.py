@@ -54,23 +54,40 @@ CORS(
 )
 
 @app.before_request
-def log_request_info():
-    """Log details about every incoming request."""
-    if request.path == '/health': return # Skip logging for frequent health checks
+def handle_pre_request():
+    """Log details and handle OPTIONS preflight."""
+    if request.path == '/health': return
+    
+    # Log the request
     print(f"[DEBUG] Request: {request.method} {request.path}", flush=True)
-    # Only log headers for non-options to reduce noise
     if request.method != 'OPTIONS':
-        # Selectively log important headers
         important_headers = {k: v for k, v in request.headers.items() if k.lower() in ['origin', 'referer', 'content-type']}
         print(f"[DEBUG] Headers: {important_headers}", flush=True)
+
+    # ✅ Handle OPTIONS preflight centrally
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        return response
 
 # ✅ FORCE headers on EVERY response (critical for Gunicorn)
 @app.after_request
 def after_request(response):
-    response.headers["Access-Control-Allow-Origin"] = "https://praesentix-ty5d.vercel.app"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    origin = request.headers.get('Origin')
+    # Use the requesting origin if it contains 'vercel.app' or matches the target, 
+    # otherwise fallback to the provided target
+    allowed_origin = "https://praesentix-ty5d.vercel.app"
+    if origin and ('vercel.app' in origin or 'localhost' in origin):
+        allowed_origin = origin
+        
+    response.headers["Access-Control-Allow-Origin"] = allowed_origin
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Requested-With"
     response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
     response.headers["Access-Control-Allow-Credentials"] = "true"
+    
+    # Ensure no duplicate headers from flask-cors
+    if response.headers.get('Access-Control-Allow-Origin') == '*':
+        response.headers["Access-Control-Allow-Origin"] = allowed_origin
+        
     return response
 
 @app.route('/')
