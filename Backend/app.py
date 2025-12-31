@@ -45,7 +45,14 @@ FACE_RECOGNITION_THRESHOLD = 0.68
 MODEL_NAME = 'ArcFace'
 
 app = Flask(__name__)
-CORS(app)
+# Allow specific frontend origin and common methods for face recognition
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["https://praesentix-ty5d.vercel.app"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Database configuration
 # Removed Flask-SQLAlchemy config
@@ -799,4 +806,6 @@ def get_education_stats():
         db.close()
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5002, host='0.0.0.0')
+    # Use PORT environment variable if available (required for Render)
+    port = int(os.environ.get('PORT', 5002))
+    app.run(debug=False, port=port, host='0.0.0.0')
