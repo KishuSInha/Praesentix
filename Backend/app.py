@@ -7,6 +7,8 @@ load_dotenv()
 # Disable oneDNN optimizations and FORCE CPU-ONLY for Render
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["XLA_FLAGS"] = "--xla_gpu_cuda_data_dir="
 
 import json
 import base64
@@ -114,6 +116,16 @@ def warmup():
     except Exception as e:
         print(f"[ERROR] Warmup failed: {str(e)}", flush=True)
         return jsonify({'success': False, 'message': str(e)}), 500
+
+# Perform initial warmup at startup
+print("[INFO] Performing initial model warmup...", flush=True)
+with app.app_context():
+    try:
+        dummy_img = np.zeros((224, 224, 3), dtype=np.uint8)
+        DeepFace.represent(dummy_img, model_name=MODEL_NAME, enforce_detection=False, detector_backend='opencv')
+        print("[INFO] Initial warmup successful!", flush=True)
+    except Exception as e:
+        print(f"[WARNING] Startup warmup failed (will retry on first request): {e}", flush=True)
 
 # Database configuration
 # Removed Flask-SQLAlchemy config
