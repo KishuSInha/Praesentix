@@ -45,14 +45,27 @@ FACE_RECOGNITION_THRESHOLD = 0.68
 MODEL_NAME = 'ArcFace'
 
 app = Flask(__name__)
-# Allow specific frontend origin and common methods for face recognition
+
+# Enhanced CORS configuration
 CORS(app, resources={
-    r"/api/*": {
-        "origins": ["https://praesentix-ty5d.vercel.app"],
+    r"/*": {
+        "origins": ["https://praesentix-ty5d.vercel.app", "http://localhost:5173"],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
+        "supports_credentials": True,
+        "max_age": 3600
     }
 })
+
+@app.route('/')
+def health_check():
+    """Simple health check for Render/Deployment verification."""
+    return jsonify({
+        'status': 'Server running',
+        'timestamp': datetime.now().isoformat(),
+        'environment': os.environ.get('FLASK_ENV', 'production'),
+        'cors_allowed': 'https://praesentix-ty5d.vercel.app'
+    })
 
 # Database configuration
 # Removed Flask-SQLAlchemy config
@@ -379,10 +392,8 @@ def mark_notification_read(notification_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/recognize', methods=['POST', 'OPTIONS'])
+@app.route('/api/recognize', methods=['POST'])
 def recognize_face():
-    if request.method == 'OPTIONS':
-        return '', 204
     
     try:
         data = request.get_json()
@@ -485,10 +496,8 @@ def recognize_face():
         traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@app.route('/api/mark-attendance', methods=['POST', 'OPTIONS'])
+@app.route('/api/mark-attendance', methods=['POST'])
 def mark_attendance_endpoint():
-    if request.method == 'OPTIONS':
-        return '', 204
     
     try:
         data = request.get_json()
@@ -699,10 +708,8 @@ def export_period_attendance():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/enroll-face', methods=['POST', 'OPTIONS'])
+@app.route('/api/enroll-face', methods=['POST'])
 def enroll_face():
-    if request.method == 'OPTIONS':
-        return '', 204
     
     try:
         student_name = request.form.get('studentName')
