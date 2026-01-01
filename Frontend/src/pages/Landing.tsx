@@ -19,7 +19,44 @@ const Landing = () => {
   const navigate = useNavigate();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isHoveringHero, setIsHoveringHero] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [systemStatus, setSystemStatus] = useState<"loading" | "operational" | "offline">("loading");
+  const [latency, setLatency] = useState<number | null>(null);
   const heroRef = useRef(null);
+
+  const API_URL = import.meta.env.VITE_API_URL || "";
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      const start = performance.now();
+      try {
+        const response = await fetch(`${API_URL}/health`);
+        if (response.ok) {
+          const end = performance.now();
+          setLatency(Math.round(end - start));
+          setSystemStatus("operational");
+        } else {
+          setSystemStatus("offline");
+        }
+      } catch (error) {
+        console.error("Failed to fetch system status:", error);
+        setSystemStatus("offline");
+      }
+    };
+
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30000); // Update every 30s
+    return () => clearInterval(interval);
+  }, [API_URL]);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     const handleMouseMove = (e) => {
@@ -43,19 +80,20 @@ const Landing = () => {
   return (
     <div className="min-h-screen bg-[#fafafa] text-[#121212] font-sans selection:bg-blue-600 selection:text-white overflow-x-hidden">
 
-      {/* Custom Magnetic Cursor */}
-      <motion.div
-        className="fixed pointer-events-none z-[9999] w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold uppercase tracking-tighter mix-blend-difference"
-        animate={{
-          left: mousePos.x - 48,
-          top: mousePos.y - 48,
-          scale: isHoveringHero ? 1 : 0,
-          opacity: isHoveringHero ? 1 : 0
-        }}
-        transition={{ type: "spring", stiffness: 250, damping: 25, mass: 0.5 }}
-      >
-        Enter App
-      </motion.div>
+      {!isMobile && (
+        <motion.div
+          className="fixed pointer-events-none z-[9999] w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold uppercase tracking-tighter mix-blend-difference"
+          animate={{
+            left: mousePos.x - 48,
+            top: mousePos.y - 48,
+            scale: isHoveringHero ? 1 : 0,
+            opacity: isHoveringHero ? 1 : 0
+          }}
+          transition={{ type: "spring", stiffness: 250, damping: 25, mass: 0.5 }}
+        >
+          Enter App
+        </motion.div>
+      )}
 
       {/* UFO Style Navigation */}
       <nav className="fixed top-0 w-full z-50 px-6 py-8 flex justify-between items-center mix-blend-difference text-white">
@@ -81,7 +119,7 @@ const Landing = () => {
       >
         <div className="container mx-auto">
           <div className="flex flex-col mb-16">
-            <h1 className="text-[14vw] leading-[0.8] font-black tracking-tighter uppercase mb-8">
+            <h1 className="text-[14vw] md:text-[14vw] text-[18vw] leading-[0.8] font-black tracking-tighter uppercase mb-8">
               Praesentix<span className="text-blue-600">.</span>
             </h1>
 
@@ -211,7 +249,7 @@ const Landing = () => {
       <footer className="bg-[#121212] text-white pt-24 pb-12 px-6 overflow-hidden">
         <div className="container mx-auto">
           <div className="border-b border-white/10 pb-20 mb-20">
-            <h2 className="text-[15vw] leading-[0.75] font-black uppercase tracking-tighter opacity-5 select-none pointer-events-none">
+            <h2 className="text-[15vw] md:text-[15vw] text-[20vw] leading-[0.75] font-black uppercase tracking-tighter opacity-5 select-none pointer-events-none">
               Praesentix
             </h2>
             <div className="flex flex-col md:flex-row justify-between items-center md:items-end mt-[-4vw] gap-12">
@@ -239,7 +277,6 @@ const Landing = () => {
               <span className="text-[10px] font-bold uppercase tracking-widest text-blue-500 underline decoration-2 underline-offset-8">[ Contact ]</span>
               <div className="space-y-3">
                 <p className="text-lg font-bold hover:text-blue-500 cursor-pointer transition-colors">support@praesentix.com</p>
-                <p className="text-lg font-bold">+91 91421 95378</p>
               </div>
             </div>
 
@@ -262,13 +299,16 @@ const Landing = () => {
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">[ Status ]</span>
               <div className="flex items-center gap-3">
                 <div className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                  <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${systemStatus === "operational" ? "animate-ping bg-green-400" : systemStatus === "loading" ? "bg-blue-400" : "bg-red-400"}`}></span>
+                  <span className={`relative inline-flex rounded-full h-3 w-3 ${systemStatus === "operational" ? "bg-green-500" : systemStatus === "loading" ? "bg-blue-500" : "bg-red-500"}`}></span>
                 </div>
-                <p className="text-sm font-black uppercase tracking-tighter">Operational</p>
+                <p className="text-sm font-black uppercase tracking-tighter">
+                  {systemStatus === "operational" ? "Operational" : systemStatus === "loading" ? "Checking..." : "Offline"}
+                </p>
               </div>
               <p className="text-[10px] font-bold text-slate-500 leading-relaxed uppercase tracking-widest">
-                Node: ASIA-SOUTH-1<br /> Latency: 14ms
+                Node: ASIA-SOUTH-1<br />
+                {latency !== null ? `Latency: ${latency}ms` : "Latency: --"}
               </p>
             </div>
 

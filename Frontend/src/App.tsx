@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { ToastProvider } from "./hooks/useToast";
 
 // Import pages
@@ -21,6 +22,33 @@ import Selection from "./pages/Selection";
 
 const queryClient = new QueryClient();
 
+const AuthHandler = ({ children }: { children: React.ReactNode }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const user = localStorage.getItem("currentUser");
+    if (user) {
+      try {
+        const parsedUser = JSON.parse(user);
+        const role = parsedUser.role || parsedUser.userType;
+
+        // If user is logged in and on landing or login page, redirect to dashboard
+        if (location.pathname === "/" || location.pathname === "/login") {
+          if (role) {
+            navigate(`/dashboard/${role}`);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse user session", e);
+        localStorage.removeItem("currentUser");
+      }
+    }
+  }, [location.pathname, navigate]);
+
+  return <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -33,21 +61,23 @@ const App = () => (
             v7_relativeSplatPath: true,
           }}
         >
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/selection" element={<Selection />} />
-            <Route path="/manual-attendance" element={<ManualAttendance />} />
-            <Route path="/camera-attendance-location" element={<LocationCheckPage />} />
-            <Route path="/camera-attendance" element={<CameraAttendance />} />
-            <Route path="/dashboard/student" element={<StudentDashboard />} />
-            <Route path="/dashboard/teacher" element={<TeacherDashboard />} />
-            <Route path="/dashboard/admin" element={<AdminDashboard />} />
-            <Route path="/dashboard/education" element={<EducationDashboard />} />
-            <Route path="/user-management" element={<UserManagementPage />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AuthHandler>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/selection" element={<Selection />} />
+              <Route path="/manual-attendance" element={<ManualAttendance />} />
+              <Route path="/camera-attendance-location" element={<LocationCheckPage />} />
+              <Route path="/camera-attendance" element={<CameraAttendance />} />
+              <Route path="/dashboard/student" element={<StudentDashboard />} />
+              <Route path="/dashboard/teacher" element={<TeacherDashboard />} />
+              <Route path="/dashboard/admin" element={<AdminDashboard />} />
+              <Route path="/dashboard/education" element={<EducationDashboard />} />
+              <Route path="/user-management" element={<UserManagementPage />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AuthHandler>
         </BrowserRouter>
       </ToastProvider>
     </TooltipProvider>

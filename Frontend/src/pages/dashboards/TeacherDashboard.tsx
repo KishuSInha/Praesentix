@@ -7,6 +7,7 @@ import LoadingSkeleton from "../../components/LoadingSkeleton";
 import SearchBar from "../../components/SearchBar";
 import NotificationCenter from "../../components/NotificationCenter";
 import Logo from "../../components/Logo";
+import LogoutButton from "../../components/LogoutButton";
 
 interface TeacherStats {
   totalClasses: number;
@@ -100,6 +101,7 @@ const TeacherDashboard = () => {
             </div>
             <div className="flex items-center space-x-2">
               <NotificationCenter />
+              <LogoutButton variant="minimal" />
             </div>
           </div>
         </div>

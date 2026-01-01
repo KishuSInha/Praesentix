@@ -181,6 +181,8 @@ def get_face_encodings_from_image(image):
         # enforce_detection=False allows returning embedding even if face detection is weak (useful for alignment issues)
         # but for accuracy, we want detection. Let's try True first, fall back to False if needed or handle exception.
         
+        print(f"[DEBUG] Starting DeepFace.represent with image shape: {image.shape}", flush=True)
+        
         results = DeepFace.represent(
             img_path=image,
             model_name=MODEL_NAME,
@@ -188,14 +190,18 @@ def get_face_encodings_from_image(image):
             detector_backend='opencv' # opencv is much lighter/faster than ssd, better for low-mem environments
         )
         
+        print(f"[DEBUG] DeepFace.represent completed successfully", flush=True)
         encodings = [np.array(res['embedding']) for res in results]
         return encodings
         
-    except ValueError:
+    except ValueError as ve:
         # No face detected
+        print(f"[DEBUG] No face detected: {str(ve)}", flush=True)
         return []
     except Exception as e:
-        print(f"DeepFace encoding error: {e}")
+        print(f"[ERROR] DeepFace encoding error: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
         return []
 
 def find_cosine_distance(source_representation, test_representation):
@@ -474,15 +480,15 @@ def recognize_face():
                 print("[ERROR] Failed to decode image", flush=True)
                 return jsonify({'success': False, 'message': 'Failed to decode image'}), 400
             
-            # Downscale image if it's too large to save memory during DeepFace processing
-            # 1280 is high enough to see 60 faces in a crowd
-            max_dim = 1280
+            # Downscale image AGGRESSIVELY for Render's 512MB RAM limit
+            # 800px is enough for face detection while saving significant memory
+            max_dim = 800  # Reduced from 1280 for memory efficiency
             h, w = image.shape[:2]
             if max(h, w) > max_dim:
                 scale = max_dim / max(h, w)
                 new_w, new_h = int(w * scale), int(h * scale)
                 image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                print(f"[DEBUG] Resized image to: {image.shape}", flush=True)
+                print(f"[DEBUG] Resized image from ({w}x{h}) to {image.shape} for memory efficiency", flush=True)
             else:
                 print(f"[DEBUG] Image dimensions OK: {image.shape}", flush=True)
                 
@@ -500,8 +506,20 @@ def recognize_face():
             
             # Get face encodings from the input image using DeepFace
             print("[DEBUG] Calling DeepFace.represent...", flush=True)
-            face_encodings = get_face_encodings_from_image(image)
-            print(f"[DEBUG] DeepFace.represent returned {len(face_encodings) if face_encodings else 0} faces", flush=True)
+            print(f"[DEBUG] Current memory usage before DeepFace call", flush=True)
+            
+            try:
+                face_encodings = get_face_encodings_from_image(image)
+                print(f"[DEBUG] DeepFace.represent returned {len(face_encodings) if face_encodings else 0} faces", flush=True)
+            except Exception as deepface_error:
+                print(f"[ERROR] DeepFace failed catastrophically: {str(deepface_error)}", flush=True)
+                import traceback
+                traceback.print_exc()
+                return jsonify({
+                    'success': False,
+                    'message': f'Face recognition service error: {str(deepface_error)}. This may be due to memory constraints on the server. Please try with a smaller image or contact support.',
+                    'detectedFaces': []
+                }), 500
             
             # Immediate GC to clear large activation tensors from detection
             gc.collect()

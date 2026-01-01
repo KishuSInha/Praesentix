@@ -7,6 +7,7 @@ import LoadingSkeleton from "../../components/LoadingSkeleton";
 import SystemHealth from "../../components/SystemHealth";
 import NotificationCenter from "../../components/NotificationCenter";
 import Logo from "../../components/Logo";
+import LogoutButton from "../../components/LogoutButton";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 
 interface AdminStats {
@@ -77,6 +78,7 @@ const AdminDashboard = () => {
             </div>
             <div className="flex items-center space-x-2">
               <NotificationCenter />
+              <LogoutButton variant="minimal" />
             </div>
           </div>
         </div>

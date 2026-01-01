@@ -5,6 +5,7 @@ import { mockAPI, School as SchoolType } from "../../utils/mockData";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTranslation } from 'react-i18next';
 import Logo from "../../components/Logo";
+import LogoutButton from "../../components/LogoutButton";
 
 // Use SchoolType directly since we've made all properties optional in the base interface
 type ExtendedSchoolType = SchoolType;
@@ -251,6 +252,7 @@ const EducationDashboard = () => {
                 <p className="text-xs text-muted-foreground">{t('Key performance metrics for schools in the Amritsar District')}</p>
               </div>
             </div>
+            <LogoutButton className="ml-auto" />
           </div>
         </div>
       </header>

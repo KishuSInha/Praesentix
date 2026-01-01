@@ -6,6 +6,7 @@ import { enhancedApi } from "../../utils/enhancedApi";
 import LoadingSkeleton from "../../components/LoadingSkeleton";
 import NotificationCenter from "../../components/NotificationCenter";
 import Logo from "../../components/Logo";
+import LogoutButton from "../../components/LogoutButton";
 import Tooltip from "../../components/Tooltip";
 
 interface StudentStats {
@@ -116,6 +117,7 @@ Class Rank,#${stats?.rank}`;
             </div>
             <div className="flex items-center space-x-2">
               <NotificationCenter />
+              <LogoutButton variant="minimal" />
             </div>
           </div>
         </div>
