@@ -34,10 +34,10 @@ const Landing = () => {
   };
 
   const reviews = [
-    { id: "01", name: "Utkarsh Sinha", role: "3rd Year • CS Engineering", img: founderImage, review: "The neural matching accuracy is incredible. It handles my early morning 'just woke up' face perfectly during 8 AM lectures." },
-    { id: "02", name: "Soumya Sagar", role: "Final Year • IT & Systems", img: founder2Image, review: "Finally, an attendance system that doesn't feel like a chore. Sub-second verification is a total game changer for our lab entries." },
+    { id: "01", name: "Utkarsh Sinha", role: "2nd Year • CS Engineering", img: founderImage, review: "The neural matching accuracy is incredible. It handles my early morning 'just woke up' face perfectly during 8 AM lectures." },
+    { id: "02", name: "Soumya Sagar", role: "3rd Semester • IT & Systems", img: founder2Image, review: "Finally, an attendance system that doesn't feel like a chore. Sub-second verification is a total game changer for our lab entries." },
     { id: "03", name: "Avijit Choudhary", role: "2nd Year • Design & Media", img: cofounderImage, review: "As a design student, I appreciate the UI. It’s rare to see college software that actually looks and feels like it belongs in 2025." },
-    { id: "04", name: "Subham Sarangi", role: "3rd Year • Applied Math", img: subhamImage, review: "The backend stability is what impresses me most. No lag, no false negatives—just seamless data logging every single day." },
+    { id: "04", name: "Subham Sarangi", role: "Applied Math", img: subhamImage, review: "The backend stability is what impresses me most. No lag, no false negatives—just seamless data logging every single day." },
   ];
 
   return (
