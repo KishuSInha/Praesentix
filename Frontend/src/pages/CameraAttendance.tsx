@@ -31,9 +31,9 @@ const CameraAttendance = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number | null>(null);
-  
+
   const userNameRef = useRef<HTMLInputElement>(null);
-  
+
   const [isStreamActive, setIsStreamActive] = useState(false);
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
   const [isScanning, setIsScanning] = useState(false);
@@ -42,6 +42,7 @@ const CameraAttendance = () => {
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [showAlreadyMarkedDialog, setShowAlreadyMarkedDialog] = useState(false);
   const [alreadyMarkedStudents, setAlreadyMarkedStudents] = useState<string[]>([]);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   const periods = [
     "1st Period (9:00-10:00)",
@@ -95,7 +96,7 @@ const CameraAttendance = () => {
         video: {
           width: { ideal: 640 },
           height: { ideal: 480 },
-          facingMode: 'user'
+          facingMode: facingMode
         }
       });
 
@@ -131,6 +132,26 @@ const CameraAttendance = () => {
     setDetectedFaces([]);
     setIsScanning(false);
   };
+
+  const toggleCamera = () => {
+    const newMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newMode);
+    if (isStreamActive) {
+      stopCamera();
+      // Use a small timeout to ensure the previous stream is fully stopped
+      setTimeout(() => {
+        // Re-start will use the new facingMode state
+        // Since setFacingMode is async, we'll use a trick or just wait for effect
+      }, 100);
+    }
+  };
+
+  // Re-start camera when facingMode changes if it was active
+  useEffect(() => {
+    if (isStreamActive) {
+      startCamera();
+    }
+  }, [facingMode]);
 
   const startScanning = async () => {
     if (!currentPeriod) {
@@ -170,13 +191,18 @@ const CameraAttendance = () => {
         return;
       }
 
-      // Set canvas size to match video
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Set canvas size for processing (smaller for AI to save memory)
+      // 640x480 is standard for many face models and much lighter than 1080p
+      const targetWidth = 640;
+      const scale = targetWidth / video.videoWidth;
+      const targetHeight = video.videoHeight * scale;
+
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
 
       // Convert to blob
-      const imageBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+      const imageBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
 
       if (!imageBlob) {
         showToast('error', 'Capture Failed', 'Failed to capture image from camera. Please ensure the camera is active and try again.');
@@ -189,27 +215,27 @@ const CameraAttendance = () => {
 
       reader.onloadend = async () => {
         const base64Image = (reader.result as string).split(',')[1];
-        
+
         try {
           // Import the API service
           const apiService = (await import('../utils/api')).default;
-          
+
           // Use the API service to recognize faces with period and date
           const result = await apiService.recognizeFace(base64Image, {
             period: currentPeriod,
             date: attendanceDate
           });
-          
+
           if (result.success && result.detectedFaces.length > 0) {
             setDetectedFaces(result.detectedFaces);
-            
+
             // Check attendance status for each detected face
             let newAttendanceCount = 0;
             let alreadyMarkedCount = 0;
             let unknownCount = 0;
             let spoofedCount = 0;
             const alreadyMarkedList: string[] = [];
-            
+
             result.detectedFaces.forEach((face: DetectedFace) => {
               if (face.spoofed) {
                 spoofedCount++;
@@ -222,31 +248,31 @@ const CameraAttendance = () => {
                 newAttendanceCount++;
               }
             });
-            
+
             // Show appropriate notifications
             if (spoofedCount > 0) {
-              showToast('error', 'Spoofing Detected', 
+              showToast('error', 'Spoofing Detected',
                 `${spoofedCount} face(s) detected as spoofed (photo/screen). Please use live camera.`);
             }
-            
+
             if (alreadyMarkedCount > 0) {
               // Show alert dialog for already marked attendance
               setAlreadyMarkedStudents(alreadyMarkedList);
               setShowAlreadyMarkedDialog(true);
-              
+
               // Also show toast for quick reference
               if (newAttendanceCount === 0 && spoofedCount === 0) {
-                showToast('info', 'Attendance Already Marked', 
+                showToast('info', 'Attendance Already Marked',
                   `Attendance already marked for ${alreadyMarkedCount} student(s) today`);
               } else if (newAttendanceCount > 0) {
-                showToast('success', 'Attendance Status', 
+                showToast('success', 'Attendance Status',
                   `✅ Marked: ${newAttendanceCount} new | ℹ️ Already marked: ${alreadyMarkedCount}`);
               }
             } else if (newAttendanceCount > 0) {
-              showToast('success', 'Attendance Marked Successfully', 
+              showToast('success', 'Attendance Marked Successfully',
                 `Attendance marked for ${newAttendanceCount} student(s)`);
             } else if (unknownCount > 0 && spoofedCount === 0) {
-              showToast('warning', 'Unknown Faces', 
+              showToast('warning', 'Unknown Faces',
                 `${unknownCount} face(s) not recognized. Please ensure proper registration.`);
             } else if (spoofedCount === 0 && unknownCount === 0 && alreadyMarkedCount === 0) {
               showToast('success', 'Faces Detected', `Found ${result.detectedFaces.length} students`);
@@ -262,7 +288,7 @@ const CameraAttendance = () => {
           setIsScanning(false);
         }
       };
-      
+
       reader.onerror = () => {
         showToast('error', 'File Read Error', 'FileReader failed to process the image.');
         setIsScanning(false);
@@ -352,6 +378,12 @@ const CameraAttendance = () => {
                   Camera Feed
                 </h2>
                 <div className="flex gap-2">
+                  {isStreamActive && (
+                    <button onClick={toggleCamera} className="btn-secondary flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4" />
+                      Switch to {facingMode === 'user' ? 'Back' : 'Front'}
+                    </button>
+                  )}
                   {!isStreamActive ? (
                     <button onClick={startCamera} className="btn-primary">
                       <Camera className="w-4 h-4 mr-2" />
@@ -379,7 +411,7 @@ const CameraAttendance = () => {
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 </div>
-                
+
                 {isScanning && (
                   <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
                     <div className="bg-card rounded-lg p-6 text-center">
@@ -388,7 +420,7 @@ const CameraAttendance = () => {
                     </div>
                   </div>
                 )}
-                
+
                 {!isStreamActive && (
                   <div className="absolute inset-0 w-full h-full flex items-center justify-center text-muted-foreground">
                     <div className="text-center">
@@ -410,7 +442,7 @@ const CameraAttendance = () => {
                     <Scan className="w-4 h-4 mr-2" />
                     {isScanning ? 'Scanning...' : 'Start Scanning'}
                   </button>
-                  
+
                   {detectedFaces.length > 0 && (
                     <button onClick={retryDetection} className="btn-secondary">
                       <RefreshCw className="w-4 h-4 mr-2" />
@@ -440,15 +472,14 @@ const CameraAttendance = () => {
                   {detectedFaces.map((face, index) => (
                     <div
                       key={index}
-                      className={`p-3 rounded-lg border transition-all ${
-                        face.spoofed 
-                          ? 'bg-red-500/10 border-red-500/30' 
-                          : face.attendanceAlreadyMarked
+                      className={`p-3 rounded-lg border transition-all ${face.spoofed
+                        ? 'bg-red-500/10 border-red-500/30'
+                        : face.attendanceAlreadyMarked
                           ? 'bg-yellow-500/10 border-yellow-500/30'
                           : face.name === "Unknown"
-                          ? 'bg-muted border-muted-foreground/30'
-                          : 'bg-green-500/10 border-green-500/30'
-                      }`}
+                            ? 'bg-muted border-muted-foreground/30'
+                            : 'bg-green-500/10 border-green-500/30'
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
@@ -563,7 +594,7 @@ const CameraAttendance = () => {
                 </ul>
               </div>
               <p className="text-sm text-muted-foreground">
-                Students can only mark attendance once per day. If you believe this is an error, 
+                Students can only mark attendance once per day. If you believe this is an error,
                 please contact your administrator.
               </p>
             </AlertDialogDescription>

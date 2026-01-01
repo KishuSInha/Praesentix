@@ -49,10 +49,11 @@ MODEL_NAME = 'Facenet'
 
 app = Flask(__name__)
 
-# ✅ GLOBAL CORS — applies to ALL routes
+# ✅ GLOBAL CORS — Allow Vercel and Local Development
 CORS(
     app,
-    resources={r"/api/*": {"origins": "https://praesentix-ty5d.vercel.app"}},
+    # Standard Flask-CORS only allows one origin string by default or a list
+    resources={r"/api/*": {"origins": ["https://praesentix-ty5d.vercel.app", "http://localhost:5173", "http://localhost:8080"]}},
     supports_credentials=True
 )
 
@@ -72,25 +73,28 @@ def handle_pre_request():
         response = app.make_default_options_response()
         return response
 
-# ✅ FORCE headers on EVERY response (critical for Gunicorn)
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    # Use the requesting origin if it contains 'vercel.app' or matches the target, 
-    # otherwise fallback to the provided target
-    allowed_origin = "https://praesentix-ty5d.vercel.app"
-    if origin and ('vercel.app' in origin or 'localhost' in origin):
-        allowed_origin = origin
+    # List of allowed origins for direct header injection
+    allowed_origins = [
+        "https://praesentix-ty5d.vercel.app", 
+        "http://localhost:5173", 
+        "http://localhost:8080"
+    ]
+    
+    if origin in allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    elif origin and 'vercel.app' in origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "https://praesentix-ty5d.vercel.app"
         
-    response.headers["Access-Control-Allow-Origin"] = allowed_origin
     response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Requested-With"
-    response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+    # Note: Access-Control-Allow-Methods should NOT be manual if CORS(app) is used, 
+    # but keeping it for Gunicorn compatibility if it strips them
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
-    # Ensure no duplicate headers from flask-cors
-    if response.headers.get('Access-Control-Allow-Origin') == '*':
-        response.headers["Access-Control-Allow-Origin"] = allowed_origin
-        
     return response
 
 @app.route('/')
