@@ -43,10 +43,9 @@ def normalize_date(date_str):
             pass
     return date_str
 
-# Face recognition settings for DeepFace (ArcFace)
-# Cosine distance limit for ArcFace is usually around 0.68
-FACE_RECOGNITION_THRESHOLD = 0.68
-MODEL_NAME = 'ArcFace'
+# Face recognition settings for DeepFace (Facenet is lighter for 512MB RAM)
+FACE_RECOGNITION_THRESHOLD = 0.40 # Threshold for Facenet (Cosine) is usually around 0.40
+MODEL_NAME = 'Facenet'
 
 app = Flask(__name__)
 
@@ -117,15 +116,9 @@ def warmup():
         print(f"[ERROR] Warmup failed: {str(e)}", flush=True)
         return jsonify({'success': False, 'message': str(e)}), 500
 
-# Perform initial warmup at startup
-print("[INFO] Performing initial model warmup...", flush=True)
-with app.app_context():
-    try:
-        dummy_img = np.zeros((224, 224, 3), dtype=np.uint8)
-        DeepFace.represent(dummy_img, model_name=MODEL_NAME, enforce_detection=False, detector_backend='opencv')
-        print("[INFO] Initial warmup successful!", flush=True)
-    except Exception as e:
-        print(f"[WARNING] Startup warmup failed (will retry on first request): {e}", flush=True)
+# ✅ Startup warmup DISABLED for Render Free Tier to avoid OOM
+# DeepFace will load the model on the first request.
+# Initial requests might be slower, but this prevents startup crashes.
 
 # Database configuration
 # Removed Flask-SQLAlchemy config
@@ -478,7 +471,8 @@ def recognize_face():
                 return jsonify({'success': False, 'message': 'Failed to decode image'}), 400
             
             # Downscale image if it's too large to save memory during DeepFace processing
-            max_dim = 640
+            # 1280 is high enough to see 60 faces in a crowd
+            max_dim = 1280
             h, w = image.shape[:2]
             if max(h, w) > max_dim:
                 scale = max_dim / max(h, w)
@@ -504,6 +498,9 @@ def recognize_face():
             print("[DEBUG] Calling DeepFace.represent...", flush=True)
             face_encodings = get_face_encodings_from_image(image)
             print(f"[DEBUG] DeepFace.represent returned {len(face_encodings) if face_encodings else 0} faces", flush=True)
+            
+            # Immediate GC to clear large activation tensors from detection
+            gc.collect()
             
             if not face_encodings:
                 return jsonify({
