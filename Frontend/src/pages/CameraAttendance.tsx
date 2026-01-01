@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Camera, UserCheck, Scan, RefreshCw, CheckCircle, AlertCircle, Info } from "lucide-react";
 import { useToast } from "../hooks/useToast";
-import govEmblem from "../assets/government-emblem.svg";
+import praesentixLogo from "../assets/Praesentix.png";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -324,7 +324,7 @@ const CameraAttendance = () => {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center space-x-3">
-              <img src={govEmblem} alt="Government Emblem" className="w-10 h-10" />
+              <img src={praesentixLogo} alt="Praesentix Logo" className="w-10 h-10" />
               <div>
                 <h1 className="text-xl font-semibold">Face Recognition Attendance</h1>
                 <p className="text-sm opacity-90">Praesentix - AI-Powered Attendance System</p>
