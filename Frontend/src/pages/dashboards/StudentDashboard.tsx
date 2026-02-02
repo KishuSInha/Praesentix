@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, User, Calendar, TrendingUp, Award, Download } from "lucide-react";
 import { mockAPI } from "../../utils/mockData";
-import { enhancedApi } from "../../utils/enhancedApi";
 import LoadingSkeleton from "../../components/LoadingSkeleton";
 import NotificationCenter from "../../components/NotificationCenter";
 import Logo from "../../components/Logo";
 import LogoutButton from "../../components/LogoutButton";
 import Tooltip from "../../components/Tooltip";
+import apiService from "../../utils/api";
 
 interface StudentStats {
   attendancePercentage: number;
@@ -37,8 +37,7 @@ const StudentDashboard = () => {
 
   const loadDashboardData = async (studentId: string) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/student/${studentId}/stats`);
-      const result = await response.json();
+      const result = await apiService.getStudentStats(studentId);
       if (result.success) {
         setStats(result.data);
       }

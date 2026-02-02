@@ -44,6 +44,9 @@ const Login = () => {
 
       if (result.success) {
         localStorage.setItem("currentUser", JSON.stringify(result.user));
+        if (result.token) {
+          localStorage.setItem("token", result.token);
+        }
         navigate(`/dashboard/${formData.userType}`);
       } else {
         alert(result.message || "Invalid credentials");
@@ -139,10 +142,9 @@ const Login = () => {
                       w-full flex items-center justify-between
                       py-4 px-5
                       border text-left transition-all
-                      ${
-                        formData.userType === role
-                          ? "border-black text-black"
-                          : "border-neutral-300 text-neutral-400 hover:border-black"
+                      ${formData.userType === role
+                        ? "border-black text-black"
+                        : "border-neutral-300 text-neutral-400 hover:border-black"
                       }
                     `}
                   >

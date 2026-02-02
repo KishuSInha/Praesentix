@@ -13,6 +13,7 @@ os.environ["XLA_FLAGS"] = "--xla_gpu_cuda_data_dir="
 import json
 import base64
 import gc
+import sys
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -21,7 +22,13 @@ from neon_db import get_db
 from models import FaceEncoding, Attendance, Notification, User
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, text, case
-import sys
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+import bcrypt
+from pgvector.sqlalchemy import Vector
+from pydantic import ValidationError
+from schemas import LoginRequest, RecognizeRequest, MarkAttendanceRequest
+from logging_config import logger
+from redis_cache import cache_response, invalidate_cache
 import cv2
 import numpy as np
 from deepface import DeepFace
@@ -48,6 +55,9 @@ FACE_RECOGNITION_THRESHOLD = 0.40 # Threshold for Facenet (Cosine) is usually ar
 MODEL_NAME = 'Facenet'
 
 app = Flask(__name__)
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'super-secret-key-change-this')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
+jwt = JWTManager(app)
 
 # ✅ GLOBAL CORS — Allow Vercel and Local Development
 CORS(
@@ -57,6 +67,34 @@ CORS(
     supports_credentials=True
 )
 
+# JWT Error Handlers for Debugging
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    logger.warning(f"JWT Token expired: {jwt_payload}")
+    return jsonify({
+        'success': False,
+        'message': 'The token has expired',
+        'error': 'token_expired'
+    }), 401
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    logger.warning(f"JWT Token invalid: {error}")
+    return jsonify({
+        'success': False,
+        'message': 'Your session is invalid or has expired. Please login again.',
+        'error': 'invalid_token'
+    }), 401 # Changed from 422 to 401 to trigger frontend re-login logic if any
+
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    logger.warning(f"JWT Token missing: {error}")
+    return jsonify({
+        'success': False,
+        'message': 'Request does not contain an access token',
+        'error': 'authorization_required'
+    }), 401
+
 @app.before_request
 def handle_pre_request():
     """Log details and handle OPTIONS preflight."""
@@ -65,7 +103,12 @@ def handle_pre_request():
     # Log the request
     print(f"[DEBUG] Request: {request.method} {request.path}", flush=True)
     if request.method != 'OPTIONS':
-        important_headers = {k: v for k, v in request.headers.items() if k.lower() in ['origin', 'referer', 'content-type']}
+        auth_header = request.headers.get('Authorization', '')
+        important_headers = {
+            'Origin': request.headers.get('Origin'),
+            'Content-Type': request.headers.get('Content-Type'),
+            'Authorization': f"{auth_header[:15]}..." if auth_header else 'None'
+        }
         print(f"[DEBUG] Headers: {important_headers}", flush=True)
 
     # ✅ Handle OPTIONS preflight centrally
@@ -76,18 +119,17 @@ def handle_pre_request():
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    # List of allowed origins for direct header injection
-    allowed_origins = [
-        "https://praesentix-ty5d.vercel.app", 
-        "http://localhost:5173", 
+    # ✅ STRICT CORS — Restricted to specific production and local origins
+    ALLOWED_ORIGINS = {
+        "https://praesentix-ty5d.vercel.app",
+        "http://localhost:5173",
         "http://localhost:8080"
-    ]
+    }
     
-    if origin in allowed_origins:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    elif origin and 'vercel.app' in origin:
+    if origin in ALLOWED_ORIGINS:
         response.headers["Access-Control-Allow-Origin"] = origin
     else:
+        # Default to production if unauthorized or missing
         response.headers["Access-Control-Allow-Origin"] = "https://praesentix-ty5d.vercel.app"
         
     response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Requested-With"
@@ -140,32 +182,24 @@ def warmup():
 def get_db_session():
     return next(get_db())
 
-# ===== Face Recognition Helper Functions (DeepFace) =====
+# ===== Face Recognition Helper Functions (DeepFace + pgvector + Liveness) =====
 
-def load_all_face_encodings(db=None):
-    """Load all face encodings from the database."""
-    encodings = {}
-    should_close = False
-    if db is None:
-        db = get_db_session()
-        should_close = True
-        
-    try:
-        records = db.query(FaceEncoding).all()
-        for record in records:
-            try:
-                # Convert JSON back to NumPy
-                enc = np.array(json.loads(record.encoding_data)) 
-                encodings[record.person_id] = enc 
-            except Exception as e:
-                print(f"Error loading encoding for {record.person_id}: {e}")
-    except Exception as e:
-        print(f"Error accessing FaceEncoding DB: {e}")
-    finally:
-        if should_close:
-            db.close()
+def calculate_motion_score(frames):
+    """
+    Calculate motion score between consecutive frames using absdiff.
+    Expects list of decoded OpenCV images (BGR).
+    """
+    if len(frames) < 2:
+        return 100.0 # Can't determine from 1 frame, assume live for backward/single-frame compatibility
     
-    return encodings
+    diffs = []
+    for i in range(len(frames) - 1):
+        # Calculate mean absolute difference
+        diff = cv2.absdiff(frames[i], frames[i+1])
+        diff_score = np.mean(diff)
+        diffs.append(diff_score)
+    
+    return np.mean(diffs)
 
 def get_face_encodings_from_image(image):
     """
@@ -173,21 +207,13 @@ def get_face_encodings_from_image(image):
     Returns a list of encodings (one per detected face).
     """
     try:
-        # DeepFace expects RGB (or BGR if specified, but safely convert to RGB)
-        # cv2 reads as BGR, DeepFace handles it but being explicit is good
-        # DeepFace.represent returns a list of dicts: [{'embedding': [...], 'facial_area': ...}]
-        
-        # We pass BGR image directly since we have it via opencv
-        # enforce_detection=False allows returning embedding even if face detection is weak (useful for alignment issues)
-        # but for accuracy, we want detection. Let's try True first, fall back to False if needed or handle exception.
-        
         print(f"[DEBUG] Starting DeepFace.represent with image shape: {image.shape}", flush=True)
         
         results = DeepFace.represent(
             img_path=image,
             model_name=MODEL_NAME,
             enforce_detection=True,
-            detector_backend='opencv' # opencv is much lighter/faster than ssd, better for low-mem environments
+            detector_backend='opencv'
         )
         
         print(f"[DEBUG] DeepFace.represent completed successfully", flush=True)
@@ -200,57 +226,52 @@ def get_face_encodings_from_image(image):
         return []
     except Exception as e:
         print(f"[ERROR] DeepFace encoding error: {str(e)}", flush=True)
-        import traceback
-        traceback.print_exc()
         return []
 
-def find_cosine_distance(source_representation, test_representation):
+def find_matching_face_vector(encoding, db, threshold=FACE_RECOGNITION_THRESHOLD):
     """
-    Calculate cosine distance between two vectors.
-    """
-    a = np.matmul(np.transpose(source_representation), test_representation)
-    b = np.sum(np.multiply(source_representation, source_representation))
-    c = np.sum(np.multiply(test_representation, test_representation))
-    return 1 - (a / (np.sqrt(b) * np.sqrt(c)))
-
-def find_matching_face(encoding, known_encodings, threshold=FACE_RECOGNITION_THRESHOLD):
-    """
-    Find the best matching face in the database using Cosine Distance.
+    Find the best matching face in the database using pgvector Cosine Distance.
     Returns (person_id, confidence_percent)
     """
-    if not known_encodings:
-        return None, 0
-    
-    min_distance = float('inf')
-    best_match_id = None
-    
-    for person_id, db_encoding in known_encodings.items():
-        pass
-        # Vector size check
-        if len(encoding) != len(db_encoding):
-            continue
-            
-        distance = find_cosine_distance(encoding, db_encoding)
+    try:
+        # Convert NumPy array to list for pgvector
+        query_embedding = encoding.tolist()
         
-        if distance < min_distance:
-            min_distance = distance
-            best_match_id = person_id
+        # SQL for Cosine similarity search
+        # <=> is the operator for cosine distance in pgvector
+        # 1 - distance = similarity (confidence)
+        sql = text("""
+            SELECT person_id, 1 - (embedding <=> :query_embedding) AS confidence
+            FROM face_encodings
+            ORDER BY embedding <=> :query_embedding
+            LIMIT 1
+        """)
+        
+        result = db.execute(sql, {"query_embedding": str(query_embedding)}).fetchone()
+        
+        if result:
+            person_id, confidence = result
+            # Convert distance-based confidence to percentage
+            # Cosine distance 0 -> 100%, threshold 0.4 -> (1-0.4)*100 = 60%
+            confidence_percent = confidence * 100
             
-    # Convert distance to confidence (approximate mapping)
-    # distance 0 -> 100%, distance threshold -> 60% approx
-    confidence = max(0, (1 - min_distance) * 100)
-    
-    if min_distance <= threshold:
-        return best_match_id, confidence
-    
-    return None, confidence
+            # Check if distance (1 - confidence) is within threshold
+            if (1 - confidence) <= threshold:
+                return person_id, confidence_percent
+            
+            return None, confidence_percent
+            
+    except Exception as e:
+        print(f"[ERROR] Vector search error: {str(e)}", flush=True)
+        
+    return None, 0
 
 def parse_person_id(person_id):
     """
     Parse person_id format: 'ID-{studentId} - {name}' or just a name.
     Returns (name, roll_number).
     """
-    if person_id.startswith('ID-') and ' - ' in person_id:
+    if person_id and person_id.startswith('ID-') and ' - ' in person_id:
         # Format: "ID-123 - John Doe"
         parts = person_id.split(' - ', 1)
         roll_number = parts[0].replace('ID-', '')
@@ -258,12 +279,13 @@ def parse_person_id(person_id):
         return name, roll_number
     else:
         # Fallback: use person_id as name
-        return person_id, 'Unknown'
+        return person_id or 'Unknown', 'Unknown'
 
 # ===== End Face Recognition Helper Functions =====
 
 
 @app.route('/api/student/<student_id>/attendance', methods=['GET', 'OPTIONS'])
+@jwt_required()
 def get_student_attendance(student_id):
     db = get_db_session()
     try:
@@ -329,6 +351,7 @@ def get_student_attendance(student_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/student/<student_id>/calendar', methods=['GET', 'OPTIONS'])
+@jwt_required()
 def get_student_calendar(student_id):
     db = get_db_session()
     try:
@@ -357,6 +380,7 @@ def get_student_calendar(student_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/student/<student_id>/analytics', methods=['GET', 'OPTIONS'])
+@jwt_required()
 def get_student_analytics(student_id):
     db = get_db_session()
     try:
@@ -420,6 +444,7 @@ def get_student_analytics(student_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/notifications', methods=['GET', 'OPTIONS'])
+@jwt_required()
 def get_notifications():
     db = get_db_session()
     try:
@@ -444,6 +469,7 @@ def get_notifications():
         db.close()
 
 @app.route('/api/notifications/<int:notification_id>/read', methods=['PUT', 'OPTIONS'])
+@jwt_required()
 def mark_notification_read(notification_id):
     db = get_db_session()
     try:
@@ -459,178 +485,186 @@ def mark_notification_read(notification_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/recognize', methods=['POST', 'OPTIONS'])
+@jwt_required()
 def recognize_face():
     
     try:
-        data = request.get_json()
-        if not data or 'image' not in data:
-            return jsonify({'success': False, 'message': 'No image provided'}), 400
-        
-        period = data.get('period', '')
-        raw_date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+        data_raw = request.get_json()
+        try:
+            req = RecognizeRequest(**data_raw)
+        except ValidationError as ve:
+            return jsonify({'success': False, 'message': 'Validation failed', 'errors': ve.errors()}), 400
+
+        period = req.period
+        raw_date = req.date or datetime.now().strftime('%Y-%m-%d')
         date = normalize_date(raw_date)
         
-        # Decode base64 image
+        # Decode image(s)
+        decoded_frames = []
+        images_to_process = req.images or ([req.image] if req.image else [])
+        
+        if not images_to_process:
+            return jsonify({'success': False, 'message': 'No image provided'}), 400
+
         try:
-            print(f"[DEBUG] Decoding image... size: {len(data['image'])} bytes", flush=True)
-            image_data = base64.b64decode(data['image'])
-            nparr = np.frombuffer(image_data, np.uint8)
-            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if image is None:
-                print("[ERROR] Failed to decode image", flush=True)
-                return jsonify({'success': False, 'message': 'Failed to decode image'}), 400
+            for img_b64 in images_to_process:
+                if not img_b64: continue
+                image_data = base64.b64decode(img_b64)
+                nparr = np.frombuffer(image_data, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if frame is not None:
+                    # Downscale for memory
+                    max_dim = 800
+                    h, w = frame.shape[:2]
+                    if max(h, w) > max_dim:
+                        scale = max_dim / max(h, w)
+                        frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+                    decoded_frames.append(frame)
             
-            # Downscale image AGGRESSIVELY for Render's 512MB RAM limit
-            # 800px is enough for face detection while saving significant memory
-            max_dim = 800  # Reduced from 1280 for memory efficiency
-            h, w = image.shape[:2]
-            if max(h, w) > max_dim:
-                scale = max_dim / max(h, w)
-                new_w, new_h = int(w * scale), int(h * scale)
-                image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                print(f"[DEBUG] Resized image from ({w}x{h}) to {image.shape} for memory efficiency", flush=True)
-            else:
-                print(f"[DEBUG] Image dimensions OK: {image.shape}", flush=True)
+            if not decoded_frames:
+                return jsonify({'success': False, 'message': 'Failed to decode any images'}), 400
                 
-            print(f"[DEBUG] Image ready for processing", flush=True)
+            # Primary image for recognition is the FIRST frame
+            image = decoded_frames[0]
+            
+            # Calculate motion score for liveness
+            motion_score = calculate_motion_score(decoded_frames)
+            is_live_motion = motion_score > 0.2 if len(decoded_frames) > 1 else True
+            liveness_confidence = min(99.0, 70.0 + (motion_score * 10)) if is_live_motion else 30.0
+            
+            logger.info(f"Face recognition request: {len(decoded_frames)} frames, motion: {motion_score:.4f}, live: {is_live_motion}")
+
         except Exception as e:
-            print(f"[ERROR] Image decode error: {str(e)}", flush=True)
+            logger.error(f"Image decode error: {str(e)}")
             return jsonify({'success': False, 'message': f'Image decode error: {str(e)}'}), 400
         
-        # Load known face encodings from database
         db = get_db_session()
         try:
-            print("[DEBUG] Loading all face encodings from DB...", flush=True)
-            known_encodings = load_all_face_encodings(db)
-            print(f"[DEBUG] Loaded {len(known_encodings)} encodings", flush=True)
-            
-            # Get face encodings from the input image using DeepFace
-            print("[DEBUG] Calling DeepFace.represent...", flush=True)
-            print(f"[DEBUG] Current memory usage before DeepFace call", flush=True)
-            
+            # Get face encodings from the primary image using DeepFace
             try:
                 face_encodings = get_face_encodings_from_image(image)
-                print(f"[DEBUG] DeepFace.represent returned {len(face_encodings) if face_encodings else 0} faces", flush=True)
             except Exception as deepface_error:
-                print(f"[ERROR] DeepFace failed catastrophically: {str(deepface_error)}", flush=True)
-                import traceback
-                traceback.print_exc()
-                return jsonify({
-                    'success': False,
-                    'message': f'Face recognition service error: {str(deepface_error)}. This may be due to memory constraints on the server. Please try with a smaller image or contact support.',
-                    'detectedFaces': []
-                }), 500
+                logger.error(f"DeepFace failed: {str(deepface_error)}")
+                return jsonify({'success': False, 'message': 'Face recognition service error'}), 500
             
-            # Immediate GC to clear large activation tensors from detection
             gc.collect()
             
             if not face_encodings:
                 return jsonify({
                     'success': True,
-                    'message': 'No faces detected in image',
+                    'message': 'No faces detected',
                     'detectedFaces': []
                 })
             
-            print(f"[DEBUG] Detected {len(face_encodings)} faces in image", flush=True)
             detected_faces = []
             
             for i, encoding in enumerate(face_encodings):
-                # Find matching face in database
-                person_id, confidence = find_matching_face(encoding, known_encodings)
+                # Find matching face in database using pgvector
+                person_id, confidence = find_matching_face_vector(encoding, db)
                 
                 if person_id:
                     name, roll_number = parse_person_id(person_id)
-                    print(f"[DEBUG] Face {i+1} recognized as {name} ({roll_number}) with {confidence:.1f}% confidence", flush=True)
                     detected_face = {
                         'name': name,
                         'rollNumber': roll_number,
-                        'spoofed': False,
+                        'spoofed': not is_live_motion,
                         'emotion': 'Neutral',
                         'recognitionConfidence': float(round(confidence, 1)),
-                        'livenessConfidence': 88.0,
-                        'isLive': True
+                        'livenessConfidence': float(round(liveness_confidence, 1)),
+                        'isLive': is_live_motion
                     }
                     
-                    # Try to mark attendance
-                    success, message = period_db.mark_period_attendance(
-                        student_id=roll_number,
-                        name=name,
-                        date_str=date,
-                        period=period,
-                        emotion=detected_face['emotion'],
-                        liveness_confidence=detected_face['livenessConfidence'],
-                        recognition_confidence=detected_face['recognitionConfidence'],
-                        is_live=True,
-                        db=db
-                    )
-                    
-                    detected_face['attendanceMarked'] = success
-                    detected_face['attendanceAlreadyMarked'] = not success and 'already marked' in message.lower()
+                    # Only mark attendance if LIVE
+                    if is_live_motion:
+                        success, message = period_db.mark_period_attendance(
+                            student_id=roll_number,
+                            name=name,
+                            date_str=date,
+                            period=period,
+                            emotion=detected_face['emotion'],
+                            liveness_confidence=detected_face['livenessConfidence'],
+                            recognition_confidence=detected_face['recognitionConfidence'],
+                            is_live=True,
+                            db=db
+                        )
+                        detected_face['attendanceMarked'] = success
+                        detected_face['attendanceAlreadyMarked'] = not success and 'already marked' in message.lower()
+                        if success:
+                            invalidate_cache() # Clear stats cache on new attendance
+                    else:
+                        detected_face['attendanceMarked'] = False
+                        detected_face['attendanceAlreadyMarked'] = False
                 else:
                     # Unknown face
-                    print(f"[DEBUG] Face {i+1} not recognized (Unknown)", flush=True)
                     detected_face = {
                         'name': 'Unknown',
                         'rollNumber': 'N/A',
-                        'spoofed': False,
+                        'spoofed': not is_live_motion,
                         'emotion': 'Neutral',
                         'recognitionConfidence': round(confidence, 1),
-                        'livenessConfidence': 88.0,
-                        'isLive': True,
+                        'livenessConfidence': round(liveness_confidence, 1),
+                        'isLive': is_live_motion,
                         'attendanceMarked': False,
                         'attendanceAlreadyMarked': False
                     }
                 
                 detected_faces.append(detected_face)
+            
+            recognized_count = sum(1 for f in detected_faces if f['name'] != 'Unknown')
+            logger.info(f"Recognition success: {len(detected_faces)} detected, {recognized_count} recognized")
+            return jsonify({
+                'success': True,
+                'message': f'Detected {len(detected_faces)} face(s), recognized {recognized_count}',
+                'detectedFaces': detected_faces
+            })
         finally:
             db.close()
-        
-        recognized_count = sum(1 for f in detected_faces if f['name'] != 'Unknown')
-        
-        return jsonify({
-            'success': True,
-            'message': f'Detected {len(detected_faces)} face(s), recognized {recognized_count}',
-            'detectedFaces': detected_faces
-        })
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Recognition error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:
-        # Manual garbage collection to prevent OOM
         gc.collect()
 
 @app.route('/api/mark-attendance', methods=['POST', 'OPTIONS'])
+@jwt_required()
 def mark_attendance_endpoint():
     
     try:
-        data = request.get_json()
-        required_fields = ['studentId', 'name', 'date', 'period']
+        data_raw = request.get_json()
+        try:
+            req = MarkAttendanceRequest(**data_raw)
+        except ValidationError as ve:
+            return jsonify({'success': False, 'message': 'Validation failed', 'errors': ve.errors()}), 400
         
-        if not all(field in data for field in required_fields):
-            return jsonify({'success': False, 'message': 'Missing required fields'}), 400
-        
-        date_str = normalize_date(data['date'])
+        date_str = normalize_date(req.date)
         success, message = period_db.mark_period_attendance(
-            student_id=data['studentId'],
-            name=data['name'],
+            student_id=req.studentId,
+            name=req.name,
             date_str=date_str,
-            period=data['period'],
-            emotion=data.get('emotion', 'Neutral'),
-            liveness_confidence=data.get('livenessConfidence', 75.0),
-            recognition_confidence=data.get('recognitionConfidence', 85.0),
-            is_live=data.get('isLive', True)
+            period=req.period,
+            emotion=req.emotion,
+            liveness_confidence=req.livenessConfidence,
+            recognition_confidence=req.recognitionConfidence,
+            is_live=req.isLive
         )
         
+        if success:
+            logger.info(f"Attendance marked manually for {req.name} ({req.studentId})")
+            invalidate_cache() # Clear stats cache
+        else:
+            logger.warning(f"Manual attendance failed for {req.name}: {message}")
+
         return jsonify({
             'success': success,
             'message': message
         })
         
     except Exception as e:
+        logger.error(f"Manual attendance error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/period-attendance', methods=['GET', 'OPTIONS'])
+@jwt_required()
 def get_period_attendance_api():
     try:
         date_str = request.args.get('date')
@@ -664,6 +698,8 @@ def get_period_attendance_api():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/teacher/stats', methods=['GET', 'OPTIONS'])
+@jwt_required()
+@cache_response(timeout=600)
 def get_teacher_stats():
     db = get_db_session()
     try:
@@ -699,20 +735,36 @@ def get_teacher_stats():
 def login():
     db = get_db_session()
     try:
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
-        role = data.get('role')
+        data_raw = request.get_json()
+        try:
+            req = LoginRequest(**data_raw)
+        except ValidationError as ve:
+            return jsonify({'success': False, 'message': 'Invalid request data', 'errors': ve.errors()}), 400
+
+        username = req.username
+        password = req.password
+        role = req.role
+
+        logger.info(f"Login attempt: username={username}, role={role}")
 
         user = db.query(User).filter(
-            User.username == username,
-            User.password == password,
-            User.role == role
+            func.lower(User.username) == username.lower(),
+            func.lower(User.role) == role.lower()
         ).first()
 
-        if user:
+        if not user:
+            logger.warning(f"User not found for username={username}, role={role}")
+            return jsonify({'success': False, 'message': f'Account not found for {role}'}), 401
+        
+        logger.info(f"User found: {user.username}. Verifying password...")
+        
+        if bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
+            # Using username string as identity to avoid 'Subject must be a string' errors
+            access_token = create_access_token(identity=user.username)
+            logger.info(f"User login successful: {username} ({role})")
             return jsonify({
                 'success': True,
+                'token': access_token,
                 'user': {
                     'username': user.username,
                     'fullName': user.full_name,
@@ -721,17 +773,17 @@ def login():
                 }
             })
         else:
-            # For demo purposes, if no user exists, allow login with any credentials but mark as demo
-            # In a real app, this should return an error.
-            # But the user asked for "real data", so let's provide a fallback or just return error.
-            # Let's return error to push for "real" setup.
-            return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+            logger.warning(f"Password mismatch for user: {username}")
+            return jsonify({'success': False, 'message': 'Incorrect security key'}), 401
     except Exception as e:
+        logger.error(f"Login error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         db.close()
 
 @app.route('/api/student/<student_id>/stats', methods=['GET', 'OPTIONS'])
+@jwt_required()
+@cache_response(timeout=600)
 def get_student_stats(student_id):
     db = get_db_session()
     try:
@@ -760,6 +812,8 @@ def get_student_stats(student_id):
         db.close()
 
 @app.route('/api/admin/stats', methods=['GET', 'OPTIONS'])
+@jwt_required()
+@cache_response(timeout=600)
 def get_admin_stats():
     db = get_db_session()
     try:
@@ -794,6 +848,7 @@ def get_admin_stats():
         db.close()
 
 @app.route('/api/period-attendance/export', methods=['GET', 'OPTIONS'])
+@jwt_required()
 def export_period_attendance():
     try:
         date_str = request.args.get('date')
@@ -813,6 +868,7 @@ def export_period_attendance():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/enroll-face', methods=['POST', 'OPTIONS'])
+@jwt_required()
 def enroll_face():
     
     try:
@@ -893,6 +949,8 @@ def enroll_face():
         gc.collect()
 
 @app.route('/api/education/stats', methods=['GET', 'OPTIONS'])
+@jwt_required()
+@cache_response(timeout=600)
 def get_education_stats():
     db = get_db_session()
     try:

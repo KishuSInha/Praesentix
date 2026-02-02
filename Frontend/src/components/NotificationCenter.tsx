@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, X, AlertCircle, CheckCircle, Info } from 'lucide-react';
-const API_URL = import.meta.env.VITE_API_URL;
+import apiService from '../utils/api';
 
 interface Notification {
   id: number;
@@ -23,8 +23,7 @@ const NotificationCenter = () => {
 
   const fetchNotifications = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/notifications`);
-      const result = await response.json();
+      const result = await apiService.getNotifications();
       if (result.success) {
         setNotifications(result.data);
       }
@@ -37,9 +36,7 @@ const NotificationCenter = () => {
 
   const markAsRead = async (id: number) => {
     try {
-      await fetch(`${API_URL}/api/notifications`, {
-        method: 'PUT'
-      });
+      await apiService.markNotificationRead(id);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: 1 } : n));
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
@@ -81,9 +78,8 @@ const NotificationCenter = () => {
               notifications.map(notification => (
                 <div
                   key={notification.id}
-                  className={`p-4 border-b hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                    notification.read === 0 ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                  }`}
+                  className={`p-4 border-b hover:bg-gray-50 dark:hover:bg-gray-700 ${notification.read === 0 ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                    }`}
                 >
                   <div className="flex items-start space-x-3">
                     {getIcon(notification.type)}

@@ -6,6 +6,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { useTranslation } from 'react-i18next';
 import Logo from "../../components/Logo";
 import LogoutButton from "../../components/LogoutButton";
+import apiService from "../../utils/api";
 
 // Use SchoolType directly since we've made all properties optional in the base interface
 type ExtendedSchoolType = SchoolType;
@@ -163,12 +164,11 @@ const EducationDashboard = () => {
   const loadDashboardData = async () => {
     try {
       const [statsRes, schoolsData] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL}/api/education/stats`),
+        apiService.getEducationStats(),
         mockAPI.getSchools()
       ]);
 
-      const statsJson = await statsRes.json();
-      const statsData = statsJson.data;
+      const statsData = statsRes.data;
 
       // Ensure all schools have the required properties with defaults
       const processedSchools = (schoolsData || []).map(school => ({

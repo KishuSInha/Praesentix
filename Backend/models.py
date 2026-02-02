@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, JSON, Date, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
+from pgvector.sqlalchemy import Vector
 from datetime import datetime
 
 Base = declarative_base()
@@ -13,19 +14,23 @@ class Attendance(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     period = Column(String)
     # Additional fields from original schema
-    date = Column(String)
+    date = Column(Date)
     time = Column(String)
     emotion = Column(String, default='Neutral')
     spoof_status = Column(String, default='LIVE')
     liveness_confidence = Column(Float, default=75.0)
     recognition_confidence = Column(Float, default=85.0)
 
+    __table_args__ = (
+        UniqueConstraint('student_id', 'date', 'period', name='unique_attendance'),
+    )
+
 class FaceEncoding(Base):
     __tablename__ = "face_encodings"
 
     id = Column(Integer, primary_key=True, index=True)
     person_id = Column(String, unique=True, index=True)
-    encoding_data = Column(Text) # JSON string of attributes
+    embedding = Column(Vector(128)) # Using 128 for FaceNet as suggested
     num_images = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+import apiService from '../../utils/api';
 
 export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
   const { t } = useTranslation();
@@ -162,19 +161,12 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
         }
       });
 
-      console.log('Sending enrollment request to:', `${API_BASE_URL}/api/enroll-face`);
+      console.log('Sending enrollment request...');
 
-      const response = await fetch(`${API_BASE_URL}/api/enroll-face`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      console.log('Response status:', response.status);
-
-      const result = await response.json();
+      const result = await apiService.enrollFace(formData);
       console.log('Response data:', result);
 
-      if (!response.ok || !result.success) {
+      if (!result.success) {
         throw new Error(result.message || 'Failed to enroll student');
       }
 

@@ -4,7 +4,8 @@ import csv
 import io
 from neon_db import get_db
 from models import Attendance, Notification
-from sqlalchemy import desc
+from sqlalchemy import desc, text
+from sqlalchemy.exc import IntegrityError
 
 def mark_period_attendance(student_id, name, date_str, period, emotion="Neutral", 
                           liveness_confidence=75.0, recognition_confidence=85.0, is_live=True, db=None):
@@ -19,22 +20,18 @@ def mark_period_attendance(student_id, name, date_str, period, emotion="Neutral"
         time_str = datetime.now().strftime("%H:%M:%S")
         spoofing_status = "LIVE" if is_live else "SPOOFED"
         
-        # Check for duplicate
-        existing = db.query(Attendance).filter(
-            Attendance.student_id == student_id,
-            Attendance.date == date_str,
-            Attendance.period == period
-        ).first()
-        
-        if existing:
-            print(f"[DEBUG] Duplicate attendance found for {student_id}", flush=True)
-            return False, "Attendance already marked for this period"
-        
-        # Insert new record
+        # Convert date_str (YYYY-MM-DD) to date object
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            # Fallback if already a date object or different format
+            date_obj = datetime.now().date()
+
+        # Insert new record (UniqueConstraint handles duplicates at DB level)
         new_record = Attendance(
             student_id=student_id,
             name=name,
-            date=date_str,
+            date=date_obj,
             period=period,
             time=time_str,
             emotion=emotion,
@@ -60,6 +57,10 @@ def mark_period_attendance(student_id, name, date_str, period, emotion="Neutral"
         print(f"[DEBUG] Successfully marked attendance and created notification for {student_id}", flush=True)
         return True, "Attendance marked successfully"
         
+    except IntegrityError:
+        db.rollback()
+        print(f"[DEBUG] Duplicate attendance rejected by DB for {student_id}", flush=True)
+        return False, "Attendance already marked for this period"
     except Exception as e:
         print(f"[ERROR] Failed to mark attendance: {e}", flush=True)
         import traceback

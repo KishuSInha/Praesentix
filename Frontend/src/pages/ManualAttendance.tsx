@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, Users, Clock, Check, Filter, Download } from "lucide-react";
 import { mockAPI, Student } from "../utils/mockData";
+import apiService from "../utils/api";
 import { useToast } from "../hooks/useToast";
 import govEmblem from "../assets/government-emblem.svg";
 
@@ -41,7 +42,8 @@ const ManualAttendance = () => {
   const loadStudents = async () => {
     setIsLoading(true);
     try {
-      const data = await mockAPI.getStudents(classFilter, sectionFilter);
+      const result = await apiService.getStudents(classFilter, sectionFilter);
+      const data = result.data || result; // Handle both direct array or wrapped response
       setStudents(data);
       setFilteredStudents(data);
     } catch (error) {
@@ -54,7 +56,8 @@ const ManualAttendance = () => {
   const searchStudents = async () => {
     setIsLoading(true);
     try {
-      const data = await mockAPI.searchStudents(searchQuery);
+      const result = await apiService.searchStudents(searchQuery);
+      const data = result.data || result;
       setFilteredStudents(data);
     } catch (error) {
       showToast('error', 'Search failed', 'Please try again');
@@ -73,13 +76,13 @@ const ManualAttendance = () => {
 
   const markIndividualAttendance = async (student: Student, period: string, date: string) => {
     try {
-      await mockAPI.markAttendance([student.id], period, date);
-      
+      await apiService.markAttendance([student.id], period, date);
+
       // Update student status optimistically
-      setFilteredStudents(prev => 
+      setFilteredStudents(prev =>
         prev.map(s => s.id === student.id ? { ...s, isPresent: true, lastAttendance: new Date().toISOString() } : s)
       );
-      
+
       showToast('success', 'Attendance Marked', `${student.name} marked present for ${period}`);
       closeAttendanceModal();
     } catch (error) {
@@ -99,16 +102,16 @@ const ManualAttendance = () => {
     }
 
     try {
-      await mockAPI.markAttendance(Array.from(selectedStudents), bulkAttendance.period, bulkAttendance.date);
-      
+      await apiService.markAttendance(Array.from(selectedStudents), bulkAttendance.period, bulkAttendance.date);
+
       // Update selected students optimistically
-      setFilteredStudents(prev => 
-        prev.map(s => selectedStudents.has(s.id) 
-          ? { ...s, isPresent: true, lastAttendance: new Date().toISOString() } 
+      setFilteredStudents(prev =>
+        prev.map(s => selectedStudents.has(s.id)
+          ? { ...s, isPresent: true, lastAttendance: new Date().toISOString() }
           : s
         )
       );
-      
+
       showToast('success', 'Bulk Attendance Marked', `${selectedStudents.size} students marked present`);
       setSelectedStudents(new Set());
     } catch (error) {
@@ -311,9 +314,8 @@ const ManualAttendance = () => {
                         </div>
 
                         <div className="text-right">
-                          <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            student.isPresent ? 'status-present' : 'bg-muted'
-                          }`}>
+                          <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${student.isPresent ? 'status-present' : 'bg-muted'
+                            }`}>
                             {student.isPresent ? 'Present Today' : `${student.attendancePercentage}% Overall`}
                           </div>
                         </div>
@@ -340,7 +342,7 @@ const ManualAttendance = () => {
           <div className="bg-card rounded-lg shadow-lg max-w-md w-full animate-scale-in">
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4">Mark Attendance</h3>
-              
+
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Student</p>

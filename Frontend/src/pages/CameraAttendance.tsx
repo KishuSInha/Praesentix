@@ -122,50 +122,64 @@ const CameraAttendance = () => {
 
     canvas.width = 640;
     canvas.height = 480;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const blob = await new Promise<Blob | null>((res) =>
-      canvas.toBlob(res, "image/jpeg", 0.8)
-    );
+    const captureFrame = async () => {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((res) =>
+        canvas.toBlob(res, "image/jpeg", 0.7)
+      );
+      if (!blob) return null;
 
-    if (!blob) {
-      setIsScanning(false);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(blob);
-
-    reader.onloadend = async () => {
-      try {
-        const base64 = (reader.result as string).split(",")[1];
-        const apiService = (await import("../utils/api")).default;
-
-        const result = await apiService.recognizeFace(base64, {
-          period: currentPeriod,
-          date: attendanceDate,
-        });
-
-        if (result.success) {
-          setDetectedFaces(result.detectedFaces);
-
-          const already = result.detectedFaces
-            .filter((f: any) => f.attendanceAlreadyMarked)
-            .map((f: any) => `${f.name} (${f.rollNumber})`);
-
-          if (already.length > 0) {
-            setAlreadyMarkedStudents(already);
-            setShowAlreadyMarkedDialog(true);
-          }
-        } else {
-          showToast("info", "No Faces", "No students detected");
-        }
-      } catch (e: any) {
-        showToast("error", "Scan Failed", e.message);
-      } finally {
-        setIsScanning(false);
-      }
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => {
+          const base64 = (reader.result as string).split(",")[1];
+          resolve(base64);
+        };
+      });
     };
+
+    try {
+      // Capture 3 frames with 200ms delay
+      const frames: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const frame = await captureFrame();
+        if (frame) frames.push(frame);
+        if (i < 2) await new Promise(r => setTimeout(r, 200));
+      }
+
+      const apiService = (await import("../utils/api")).default;
+
+      if (frames.length === 0) {
+        setIsScanning(false);
+        return;
+      }
+
+      const result = await apiService.recognizeFace(frames, {
+        period: currentPeriod,
+        date: attendanceDate,
+      });
+
+      if (result.success) {
+        setDetectedFaces(result.detectedFaces);
+
+        const already = result.detectedFaces
+          .filter((f: any) => f.attendanceAlreadyMarked)
+          .map((f: any) => `${f.name} (${f.rollNumber})`);
+
+        if (already.length > 0) {
+          setAlreadyMarkedStudents(already);
+          setShowAlreadyMarkedDialog(true);
+        }
+      } else {
+        showToast("info", "No Faces", "No students detected");
+      }
+    } catch (e: any) {
+      showToast("error", "Scan Failed", e.message);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   return (
@@ -262,13 +276,12 @@ const CameraAttendance = () => {
             {detectedFaces.map((face, i) => (
               <div
                 key={i}
-                className={`p-3 rounded border flex justify-between ${
-                  face.spoofed
+                className={`p-3 rounded border flex justify-between ${face.spoofed
                     ? "border-red-400 bg-red-50"
                     : face.attendanceAlreadyMarked
-                    ? "border-yellow-400 bg-yellow-50"
-                    : "border-green-400 bg-green-50"
-                }`}
+                      ? "border-yellow-400 bg-yellow-50"
+                      : "border-green-400 bg-green-50"
+                  }`}
               >
                 <div>
                   <p className="font-medium">{face.name}</p>

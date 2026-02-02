@@ -8,6 +8,7 @@ import SearchBar from "../../components/SearchBar";
 import NotificationCenter from "../../components/NotificationCenter";
 import Logo from "../../components/Logo";
 import LogoutButton from "../../components/LogoutButton";
+import apiService from "../../utils/api";
 
 interface TeacherStats {
   totalClasses: number;
@@ -38,8 +39,7 @@ const TeacherDashboard = () => {
     setLoadingRecords(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/period-attendance?date=${today}`);
-      const result = await response.json();
+      const result = await apiService.getPeriodAttendance(today);
       if (result.success && result.data) {
         setAttendanceRecords(result.data.slice(0, 10));
       }
@@ -52,8 +52,7 @@ const TeacherDashboard = () => {
 
   const loadDashboardData = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/teacher/stats`);
-      const result = await response.json();
+      const result = await apiService.getTeacherStats();
       if (result.success && result.data) {
         setStats(result.data);
       }

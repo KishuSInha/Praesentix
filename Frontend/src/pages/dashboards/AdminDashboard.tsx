@@ -9,6 +9,7 @@ import NotificationCenter from "../../components/NotificationCenter";
 import Logo from "../../components/Logo";
 import LogoutButton from "../../components/LogoutButton";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
+import apiService from "../../utils/api";
 
 interface AdminStats {
   totalStudents: number;
@@ -34,8 +35,7 @@ const AdminDashboard = () => {
 
   const loadDashboardData = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/stats`);
-      const result = await response.json();
+      const result = await apiService.getAdminStats();
       if (result.success) {
         setStats(result.data);
       }
