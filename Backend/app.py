@@ -18,13 +18,13 @@ from datetime import datetime, timedelta
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 # from flask_sqlalchemy import SQLAlchemy # Removed
-from neon_db import get_db
-from models import FaceEncoding, Attendance, Notification, User
+from database import get_db, engine
+from models import FaceEncoding, Attendance, Notification, User, Base
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, text, case
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import bcrypt
-from pgvector.sqlalchemy import Vector
+# from pgvector.sqlalchemy import Vector # Removed
 from pydantic import ValidationError
 from schemas import LoginRequest, RecognizeRequest, MarkAttendanceRequest
 from logging_config import logger
@@ -32,6 +32,9 @@ from redis_cache import cache_response, invalidate_cache
 import cv2
 import numpy as np
 from deepface import DeepFace
+
+# Create tables if they don't exist
+Base.metadata.create_all(bind=engine)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import period_attendance as period_db
@@ -51,7 +54,7 @@ def normalize_date(date_str):
     return date_str
 
 # Face recognition settings for DeepFace (Facenet is lighter for 512MB RAM)
-FACE_RECOGNITION_THRESHOLD = 0.40 # Threshold for Facenet (Cosine) is usually around 0.40
+FACE_RECOGNITION_THRESHOLD = 0.60 # Relaxed threshold for Facenet (0.40 was too strict)
 MODEL_NAME = 'Facenet'
 
 app = Flask(__name__)
@@ -63,7 +66,7 @@ jwt = JWTManager(app)
 CORS(
     app,
     # Standard Flask-CORS only allows one origin string by default or a list
-    resources={r"/api/*": {"origins": ["https://praesentix-ty5d.vercel.app", "http://localhost:5173", "http://localhost:8080"]}},
+    resources={r"/api/*": {"origins": ["https://praesentix-ty5d.vercel.app", "http://localhost:5173", "http://localhost:8080", "http://localhost:8081"]}},
     supports_credentials=True
 )
 
@@ -123,7 +126,9 @@ def after_request(response):
     ALLOWED_ORIGINS = {
         "https://praesentix-ty5d.vercel.app",
         "http://localhost:5173",
-        "http://localhost:8080"
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "http://localhost:8081"
     }
     
     if origin in ALLOWED_ORIGINS:
@@ -143,6 +148,37 @@ def after_request(response):
 def index():
     return jsonify({"status": "Server running", "info": "Use /api/warmup to pre-load models"})
 
+@app.route('/api/seed_users_reset', methods=['GET', 'POST'])
+def seed_users_endpoint():
+    """Temporary endpoint to reset users when seed script fails."""
+    db = get_db_session()
+    try:
+        # Clear existing users
+        db.query(User).delete()
+        
+        raw_pass = "pass123"
+        hashed = bcrypt.hashpw(raw_pass.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        users = [
+            User(username="utkarsh123", password=hashed, role="student", full_name="Utkarsh Sinha", student_id="106"),
+            User(username="teacher123", password=hashed, role="teacher", full_name="Mrs. Sunita Devi"),
+            User(username="admin123", password=hashed, role="admin", full_name="System Administrator"),
+            User(username="edu123", password=hashed, role="education", full_name="Education Board Admin")
+        ]
+
+        db.add_all(users)
+        db.commit()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Users reset successfully. Password for all: pass123'
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
 @app.route('/health')
 def health_check():
     return "OK", 200
@@ -155,30 +191,12 @@ def warmup():
         # Create a dummy image to trigger internal lazy loading
         dummy_img = np.zeros((224, 224, 3), dtype=np.uint8)
         # Just call represent with enforce_detection=False
-        DeepFace.represent(dummy_img, model_name=MODEL_NAME, enforce_detection=False, detector_backend='opencv')
+        DeepFace.represent(dummy_img, model_name=MODEL_NAME, enforce_detection=False, detector_backend='retinaface')
         print("[DEBUG] Warmup successful!", flush=True)
         return jsonify({'success': True, 'message': 'Models warmed up and ready'})
     except Exception as e:
         print(f"[ERROR] Warmup failed: {str(e)}", flush=True)
         return jsonify({'success': False, 'message': str(e)}), 500
-
-# ✅ Startup warmup DISABLED for Render Free Tier to avoid OOM
-# DeepFace will load the model on the first request.
-# Initial requests might be slower, but this prevents startup crashes.
-
-# Database configuration
-# Removed Flask-SQLAlchemy config
-
-# Removed Database/Enhanced DB legacy paths (unless needed for analytics, but assuming we migrate all)
-# Keeping analytics endpoints as is (Legacy) vs refactoring them is a choice.
-# The user asked to integrate "Use Neon DB in your existing APIs".
-# For now, I will focus on the parts that were touched in step 2 (Face/Attendance).
-# Analytics endpoints connect to 'enhanced_attendance.db' via sqlite3. Ideally these should move too, but might be out of scope for "integrate it" (which looked like step 7 example).
-# However, purely removing SQLAlchemy config might break things if I don't replace logic.
-# But 'db = SQLAlchemy(app)' was only used for FaceEncoding/Attendance *Models* I created.
-# So removing it is fine as long as I replace its usage.
-
-# Helper for getting DB session
 def get_db_session():
     return next(get_db())
 
@@ -213,7 +231,7 @@ def get_face_encodings_from_image(image):
             img_path=image,
             model_name=MODEL_NAME,
             enforce_detection=True,
-            detector_backend='opencv'
+            detector_backend='retinaface'
         )
         
         print(f"[DEBUG] DeepFace.represent completed successfully", flush=True)
@@ -230,39 +248,58 @@ def get_face_encodings_from_image(image):
 
 def find_matching_face_vector(encoding, db, threshold=FACE_RECOGNITION_THRESHOLD):
     """
-    Find the best matching face in the database using pgvector Cosine Distance.
+    Find the best matching face in the database using NumPy Cosine Distance.
     Returns (person_id, confidence_percent)
     """
     try:
-        # Convert NumPy array to list for pgvector
-        query_embedding = encoding.tolist()
+        stored_faces = db.query(FaceEncoding).all()
         
-        # SQL for Cosine similarity search
-        # <=> is the operator for cosine distance in pgvector
-        # 1 - distance = similarity (confidence)
-        sql = text("""
-            SELECT person_id, 1 - (embedding <=> :query_embedding) AS confidence
-            FROM face_encodings
-            ORDER BY embedding <=> :query_embedding
-            LIMIT 1
-        """)
-        
-        result = db.execute(sql, {"query_embedding": str(query_embedding)}).fetchone()
-        
-        if result:
-            person_id, confidence = result
-            # Convert distance-based confidence to percentage
-            # Cosine distance 0 -> 100%, threshold 0.4 -> (1-0.4)*100 = 60%
-            confidence_percent = confidence * 100
+        if not stored_faces:
+            return None, 0
             
-            # Check if distance (1 - confidence) is within threshold
-            if (1 - confidence) <= threshold:
-                return person_id, confidence_percent
+        best_match_id = None
+        best_distance = 10.0 # Initialize with high distance (0 is identical)
+        
+        target_embedding = np.array(encoding)
+        # Normalize target
+        target_norm = np.linalg.norm(target_embedding)
+        
+        for face in stored_faces:
+            if not face.embedding: continue
             
-            return None, confidence_percent
+            # Load stored embedding
+            if isinstance(face.embedding, str):
+                stored_embedding = np.array(json.loads(face.embedding))
+            else:
+                stored_embedding = np.array(face.embedding)
+            
+            # Cosine Distance = 1 - Cosine Similarity
+            # Similarity = (A . B) / (||A|| * ||B||)
+            stored_norm = np.linalg.norm(stored_embedding)
+            
+            if target_norm == 0 or stored_norm == 0:
+                continue
+                
+            similarity = np.dot(target_embedding, stored_embedding) / (target_norm * stored_norm)
+            distance = 1 - similarity
+            
+            if distance < best_distance:
+                best_distance = distance
+                best_match_id = face.person_id
+        
+        # Calculate confidence percentage
+        confidence_percent = (1 - best_distance) * 100
+        print(f"[DEBUG] Best match: {best_match_id} with distance: {best_distance:.4f} (Threshold: {threshold})", flush=True)
+
+        if best_distance <= threshold:
+            return best_match_id, confidence_percent
+            
+        return None, confidence_percent
             
     except Exception as e:
         print(f"[ERROR] Vector search error: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
         
     return None, 0
 
@@ -278,10 +315,7 @@ def parse_person_id(person_id):
         name = parts[1] if len(parts) > 1 else 'Unknown'
         return name, roll_number
     else:
-        # Fallback: use person_id as name
         return person_id or 'Unknown', 'Unknown'
-
-# ===== End Face Recognition Helper Functions =====
 
 
 @app.route('/api/student/<student_id>/attendance', methods=['GET', 'OPTIONS'])
@@ -307,12 +341,6 @@ def get_student_attendance(student_id):
         absent_days = total_days - present_days
         attendance_percentage = round((present_days / total_days) * 100, 1) if total_days > 0 else 0
         
-        # Get recent 7 days attendance for trend
-        # SQLite: date('now', '-7 days')
-        # Postgres: current_date - interval '7 days'
-        # Using pure SQLAlchemy to be generic-ish or raw SQL compatible with Postgres
-        
-        # Raw SQL for trend since aggregation is easier
         recent_trend_sql = text("""
             SELECT date, COUNT(*) as present_count
             FROM attendance 
@@ -384,13 +412,6 @@ def get_student_calendar(student_id):
 def get_student_analytics(student_id):
     db = get_db_session()
     try:
-        # Weekly attendance data
-        # SQLite: strftime('%w', date) -> 0..6
-        # Postgres: to_char(date::date, 'D') -> 1..7 (Sunday=1) OR extract(dow from ...)
-        # Postgres to_char(..., 'Day') gives name.
-        # Let's use generic approach or Postgres specific.
-        
-        # We assume 'date' column is stored as 'YYYY-MM-DD' string based on previous schema.
         
         weekly_sql = text("""
             SELECT 
@@ -484,10 +505,118 @@ def mark_notification_read(notification_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ===== Shared Face Recognition Processing Logic =====
+def process_face_recognition(frames, period, date, db):
+    """
+    Core logic to process frames for face recognition.
+    Args:
+        frames: List of decoded OpenCV images (BGR).
+        period: Class period string.
+        date: Date string YYYY-MM-DD.
+        db: Database session.
+    Returns:
+        JSON compatible dictionary with results.
+    """
+    if not frames:
+        return {'success': False, 'message': 'No frames provided'}
+
+    # Primary image for recognition is the FIRST frame
+    image = frames[0]
+    
+    # Calculate motion score for liveness
+    motion_score = calculate_motion_score(frames)
+    is_live_motion = bool(motion_score > 0.2) if len(frames) > 1 else True
+    liveness_confidence = min(99.0, 70.0 + (motion_score * 10)) if is_live_motion else 30.0
+    
+    logger.info(f"Face recognition processing: {len(frames)} frames, motion: {motion_score:.4f}, live: {is_live_motion}")
+
+    try:
+        # Get face encodings from the primary image using DeepFace
+        try:
+            face_encodings = get_face_encodings_from_image(image)
+        except Exception as deepface_error:
+            logger.error(f"DeepFace failed: {str(deepface_error)}")
+            return {'success': False, 'message': 'Face recognition service error'}
+        
+        gc.collect()
+        
+        if not face_encodings:
+            return {
+                'success': True,
+                'message': 'No faces detected',
+                'detectedFaces': []
+            }
+        
+        detected_faces = []
+        
+        for encoding in face_encodings:
+            # Find matching face in database using pgvector
+            person_id, confidence = find_matching_face_vector(encoding, db)
+            
+            if person_id:
+                name, roll_number = parse_person_id(person_id)
+                detected_face = {
+                    'name': name,
+                    'rollNumber': roll_number,
+                    'spoofed': not is_live_motion,
+                    'emotion': 'Neutral',
+                    'recognitionConfidence': float(round(confidence, 1)),
+                    'livenessConfidence': float(round(liveness_confidence, 1)),
+                    'isLive': is_live_motion
+                }
+                
+                # Only mark attendance if LIVE
+                if is_live_motion:
+                    success, message = period_db.mark_period_attendance(
+                        student_id=roll_number,
+                        name=name,
+                        date_str=date,
+                        period=period,
+                        emotion=detected_face['emotion'],
+                        liveness_confidence=detected_face['livenessConfidence'],
+                        recognition_confidence=detected_face['recognitionConfidence'],
+                        is_live=True,
+                        db=db
+                    )
+                    detected_face['attendanceMarked'] = success
+                    detected_face['attendanceAlreadyMarked'] = not success and 'already marked' in message.lower()
+                    if success:
+                        invalidate_cache() # Clear stats cache on new attendance
+                else:
+                    detected_face['attendanceMarked'] = False
+                    detected_face['attendanceAlreadyMarked'] = False
+            else:
+                # Unknown face
+                detected_face = {
+                    'name': 'Unknown',
+                    'rollNumber': 'N/A',
+                    'spoofed': not is_live_motion,
+                    'emotion': 'Neutral',
+                    'recognitionConfidence': round(confidence, 1),
+                    'livenessConfidence': round(liveness_confidence, 1),
+                    'isLive': is_live_motion,
+                    'attendanceMarked': False,
+                    'attendanceAlreadyMarked': False
+                }
+            
+            detected_faces.append(detected_face)
+        
+        recognized_count = sum(1 for f in detected_faces if f['name'] != 'Unknown')
+        logger.info(f"Recognition success: {len(detected_faces)} detected, {recognized_count} recognized")
+        
+        return {
+            'success': True,
+            'message': f'Detected {len(detected_faces)} face(s), recognized {recognized_count}',
+            'detectedFaces': detected_faces
+        }
+
+    except Exception as e:
+        logger.error(f"Processing error: {str(e)}", exc_info=True)
+        return {'success': False, 'message': str(e)}
+
 @app.route('/api/recognize', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def recognize_face():
-    
     try:
         data_raw = request.get_json()
         try:
@@ -513,8 +642,8 @@ def recognize_face():
                 nparr = np.frombuffer(image_data, np.uint8)
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 if frame is not None:
-                    # Downscale for memory
-                    max_dim = 800
+                    # Downscale for memory - Increased to 2560 (2.5K) for Crowd Mode
+                    max_dim = 2560 
                     h, w = frame.shape[:2]
                     if max(h, w) > max_dim:
                         scale = max_dim / max(h, w)
@@ -524,106 +653,174 @@ def recognize_face():
             if not decoded_frames:
                 return jsonify({'success': False, 'message': 'Failed to decode any images'}), 400
                 
-            # Primary image for recognition is the FIRST frame
-            image = decoded_frames[0]
-            
-            # Calculate motion score for liveness
-            motion_score = calculate_motion_score(decoded_frames)
-            is_live_motion = motion_score > 0.2 if len(decoded_frames) > 1 else True
-            liveness_confidence = min(99.0, 70.0 + (motion_score * 10)) if is_live_motion else 30.0
-            
-            logger.info(f"Face recognition request: {len(decoded_frames)} frames, motion: {motion_score:.4f}, live: {is_live_motion}")
-
         except Exception as e:
             logger.error(f"Image decode error: {str(e)}")
             return jsonify({'success': False, 'message': f'Image decode error: {str(e)}'}), 400
         
         db = get_db_session()
         try:
-            # Get face encodings from the primary image using DeepFace
-            try:
-                face_encodings = get_face_encodings_from_image(image)
-            except Exception as deepface_error:
-                logger.error(f"DeepFace failed: {str(deepface_error)}")
-                return jsonify({'success': False, 'message': 'Face recognition service error'}), 500
-            
-            gc.collect()
-            
-            if not face_encodings:
-                return jsonify({
-                    'success': True,
-                    'message': 'No faces detected',
-                    'detectedFaces': []
-                })
-            
-            detected_faces = []
-            
-            for i, encoding in enumerate(face_encodings):
-                # Find matching face in database using pgvector
-                person_id, confidence = find_matching_face_vector(encoding, db)
-                
-                if person_id:
-                    name, roll_number = parse_person_id(person_id)
-                    detected_face = {
-                        'name': name,
-                        'rollNumber': roll_number,
-                        'spoofed': not is_live_motion,
-                        'emotion': 'Neutral',
-                        'recognitionConfidence': float(round(confidence, 1)),
-                        'livenessConfidence': float(round(liveness_confidence, 1)),
-                        'isLive': is_live_motion
-                    }
-                    
-                    # Only mark attendance if LIVE
-                    if is_live_motion:
-                        success, message = period_db.mark_period_attendance(
-                            student_id=roll_number,
-                            name=name,
-                            date_str=date,
-                            period=period,
-                            emotion=detected_face['emotion'],
-                            liveness_confidence=detected_face['livenessConfidence'],
-                            recognition_confidence=detected_face['recognitionConfidence'],
-                            is_live=True,
-                            db=db
-                        )
-                        detected_face['attendanceMarked'] = success
-                        detected_face['attendanceAlreadyMarked'] = not success and 'already marked' in message.lower()
-                        if success:
-                            invalidate_cache() # Clear stats cache on new attendance
-                    else:
-                        detected_face['attendanceMarked'] = False
-                        detected_face['attendanceAlreadyMarked'] = False
-                else:
-                    # Unknown face
-                    detected_face = {
-                        'name': 'Unknown',
-                        'rollNumber': 'N/A',
-                        'spoofed': not is_live_motion,
-                        'emotion': 'Neutral',
-                        'recognitionConfidence': round(confidence, 1),
-                        'livenessConfidence': round(liveness_confidence, 1),
-                        'isLive': is_live_motion,
-                        'attendanceMarked': False,
-                        'attendanceAlreadyMarked': False
-                    }
-                
-                detected_faces.append(detected_face)
-            
-            recognized_count = sum(1 for f in detected_faces if f['name'] != 'Unknown')
-            logger.info(f"Recognition success: {len(detected_faces)} detected, {recognized_count} recognized")
-            return jsonify({
-                'success': True,
-                'message': f'Detected {len(detected_faces)} face(s), recognized {recognized_count}',
-                'detectedFaces': detected_faces
-            })
+            result = process_face_recognition(decoded_frames, period, date, db)
+            status_code = 200 if result.get('success', False) else 500
+            if 'validation failed' in str(result.get('message', '')).lower(): status_code = 400
+            return jsonify(result), status_code
         finally:
             db.close()
+            gc.collect()
+
     except Exception as e:
-        logger.error(f"Recognition error: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        gc.collect()
+
+
+@app.route('/api/rtsp/preview', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def rtsp_preview():
+    """Connect to RTSP stream and return a single frame for preview."""
+    try:
+        data = request.get_json()
+        rtsp_url = data.get('rtspUrl')
+        
+        if not rtsp_url:
+            return jsonify({'success': False, 'message': 'RTSP URL is required'}), 400
+        
+        logger.info(f"[RTSP] Attempting to connect to: {rtsp_url}")
+        
+        # Validate RTSP URL format and IP address
+        import re
+        ip_pattern = r'@(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):'
+        ip_match = re.search(ip_pattern, rtsp_url)
+        
+        if not ip_match:
+            return jsonify({
+                'success': False, 
+                'message': 'Invalid RTSP URL format. Expected format: rtsp://user:pass@IP:port/path'
+            }), 400
+        
+        ip_address = ip_match.group(1)
+        logger.info(f"[RTSP] Extracted IP: {ip_address}")
+        
+        # Validate each octet is 0-255
+        octets = ip_address.split('.')
+        for octet in octets:
+            if not octet or int(octet) > 255:
+                return jsonify({
+                    'success': False,
+                    'message': f'Invalid IP address: {ip_address}. Each number must be 0-255.'
+                }), 400
+        
+        # Configure OpenCV for RTSP with timeout and transport settings
+        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+        # Set timeout to 10 seconds instead of default 30
+        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)
+        # Use TCP for more reliable connection
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        
+        if not cap.isOpened():
+             logger.error(f"[RTSP] Failed to open stream: {rtsp_url}")
+             return jsonify({'success': False, 'message': f'Failed to connect to camera at {ip_address}. Check: 1) Camera is online, 2) Port 554 is accessible, 3) Credentials are correct.'}), 400
+             
+        ret, frame = cap.read()
+        cap.release()
+        
+        if not ret or frame is None:
+            logger.error(f"[RTSP] Connected but failed to read frame from: {rtsp_url}")
+            return jsonify({'success': False, 'message': 'Connected but failed to grab frame. Camera may be offline or stream is unavailable.'}), 400
+            
+        # Resize for preview to reduce bandwidth
+        h, w = frame.shape[:2]
+        max_dim = 640
+        if max(h, w) > max_dim:
+            scale = max_dim / max(h, w)
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+            
+        # Encode
+        _, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+        b64_image = base64.b64encode(buffer).decode('utf-8')
+        
+        logger.info(f"[RTSP] Successfully captured frame from {ip_address}")
+        return jsonify({
+            'success': True,
+            'image': b64_image
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'RTSP Error: {str(e)}'}), 500
+
+@app.route('/api/rtsp/recognize', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def rtsp_recognize():
+    """Connect to RTSP stream, capture frames, and perform recognition."""
+    try:
+        data = request.get_json()
+        rtsp_url = data.get('rtspUrl')
+        period = data.get('period')
+        raw_date = data.get('date') or datetime.now().strftime('%Y-%m-%d')
+        date = normalize_date(raw_date)
+        
+        if not rtsp_url or not period:
+            return jsonify({'success': False, 'message': 'RTSP URL and Period are required'}), 400
+        
+        logger.info(f"[RTSP Recognition] Attempting to connect to: {rtsp_url}")
+        
+        # Validate RTSP URL format and IP address
+        import re
+        ip_pattern = r'@(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):'
+        ip_match = re.search(ip_pattern, rtsp_url)
+        
+        if not ip_match:
+            return jsonify({
+                'success': False, 
+                'message': 'Invalid RTSP URL format. Expected format: rtsp://user:pass@IP:port/path'
+            }), 400
+        
+        ip_address = ip_match.group(1)
+        logger.info(f"[RTSP Recognition] Extracted IP: {ip_address}")
+        
+        # Validate each octet is 0-255
+        octets = ip_address.split('.')
+        for octet in octets:
+            if not octet or int(octet) > 255:
+                return jsonify({
+                    'success': False,
+                    'message': f'Invalid IP address: {ip_address}. Each number must be 0-255.'
+                }), 400
+        
+        # Configure OpenCV for RTSP with timeout and transport settings
+        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        
+        if not cap.isOpened():
+             logger.error(f"[RTSP Recognition] Failed to open stream: {rtsp_url}")
+             return jsonify({'success': False, 'message': f'Failed to connect to camera at {ip_address}. Check: 1) Camera is online, 2) Port 554 is accessible, 3) Credentials are correct.'}), 400
+             
+        frames = []
+        # Capture 3 frames with small delay for liveness
+        import time
+        for i in range(3):
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                frames.append(frame)
+            time.sleep(0.2) # 200ms delay
+            
+        cap.release()
+        
+        if not frames:
+            logger.error(f"[RTSP Recognition] Failed to capture frames from: {rtsp_url}")
+            return jsonify({'success': False, 'message': 'Failed to capture frames from stream. Camera may be offline.'}), 400
+            
+        logger.info(f"[RTSP Recognition] Captured {len(frames)} frames from {ip_address}")
+            
+        db = get_db_session()
+        try:
+            result = process_face_recognition(frames, period, date, db)
+            status_code = 200 if result.get('success', False) else 500
+            return jsonify(result), status_code
+        finally:
+            db.close()
+            gc.collect()
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'RTSP Recognition Error: {str(e)}'}), 500
 
 @app.route('/api/mark-attendance', methods=['POST', 'OPTIONS'])
 @jwt_required()
@@ -694,6 +891,30 @@ def get_period_attendance_api():
             'total': len(attendance_records)
         })
         
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/period-attendance/summary', methods=['GET', 'OPTIONS'])
+@jwt_required()
+def get_period_attendance_summary_api():
+    try:
+        date_str = request.args.get('date')
+        summary_data = period_db.get_attendance_summary(date_str)
+        
+        # Convert to list of dicts
+        data = []
+        for row in summary_data:
+            data.append({
+                'period': row[0],
+                'totalPresent': row[1],
+                'liveCount': row[2] or 0,
+                'spoofedCount': row[3] or 0
+            })
+            
+        return jsonify({
+            'success': True,
+            'data': data
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -909,13 +1130,9 @@ def enroll_face():
         if not all_encodings:
             return jsonify({'success': False, 'message': 'No faces detected in any of the uploaded images. Please ensure your face is clearly visible.'}), 400
         
-        # Calculate average encoding for more robust matching
         avg_encoding = np.mean(all_encodings, axis=0)
         face_encoding = avg_encoding.tolist()
         
-        # Format person_id as "ID-{student_id} - {student_name}"
-        # Format person_id as "ID-{student_id} - {student_name}"
-        # Format person_id as "ID-{student_id} - {student_name}"
         person_id = f"ID-{student_id} - {student_name}"
         
         # Save to postgres via SQLAlchemy
@@ -924,13 +1141,13 @@ def enroll_face():
         existing_face = db.query(FaceEncoding).filter(FaceEncoding.person_id == person_id).first()
         
         if existing_face:
-            existing_face.encoding_data = json.dumps(face_encoding)
+            existing_face.embedding = json.dumps(face_encoding)
             existing_face.num_images = len(all_encodings)
             db.commit()
         else:
             new_face = FaceEncoding(
                 person_id=person_id,
-                encoding_data=json.dumps(face_encoding),
+                embedding=json.dumps(face_encoding),
                 num_images=len(all_encodings)
             )
             db.add(new_face)
