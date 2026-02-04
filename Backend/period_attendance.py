@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 import csv
 import io
-from neon_db import get_db
+from database import get_db
 from models import Attendance, Notification
 from sqlalchemy import desc, text
 from sqlalchemy.exc import IntegrityError

@@ -1,7 +1,11 @@
 import bcrypt
-from neon_db import SessionLocal
-from models import User
+import bcrypt
+from database import SessionLocal, engine
+from models import User, Base
 import sys
+
+# Ensure tables exist
+Base.metadata.create_all(bind=engine)
 
 def seed_users():
     db = SessionLocal()

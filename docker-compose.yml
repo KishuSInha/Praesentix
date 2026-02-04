@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./Backend
+    ports:
+      - "5002:5002"
+    environment:
+      - FLASK_ENV=production
+      - JWT_SECRET_KEY=change_this_to_a_secure_key
+      - REDIS_URL=redis://redis:6379/0
+      # Ensure CPU mode for DeepFace to save compatibility
+      - CUDA_VISIBLE_DEVICES=-1
+    volumes:
+      # Persist SQLite databases
+      - ./Backend/database:/app/database
+      - ./Backend/enhanced_attendance.db:/app/enhanced_attendance.db
+      - ./Backend/face_encodings.db:/app/face_encodings.db
+    depends_on:
+      - redis
+    restart: always
+
+  frontend:
+    build: ./Frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: always
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    restart: always
+
+volumes:
+  db_data:

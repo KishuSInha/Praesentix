@@ -133,7 +133,7 @@ const Login = () => {
               </p>
 
               <div className="space-y-3">
-                {["student", "teacher", "admin", "education"].map((role) => (
+                {["teacher", "admin"].map((role) => (
                   <button
                     key={role}
                     type="button"

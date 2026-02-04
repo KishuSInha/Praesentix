@@ -38,6 +38,41 @@ const apiService = {
     return await response.json();
   },
 
+  // RTSP Camera Support
+  getRtspPreview: async (rtspUrl: string) => {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/rtsp/preview`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ rtspUrl })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to connect to camera');
+    }
+
+    return await response.json();
+  },
+
+  recognizeRtsp: async (rtspUrl: string, options?: { period?: string; date?: string }) => {
+    const requestBody: any = { rtspUrl };
+    if (options?.period) requestBody.period = options.period;
+    if (options?.date) requestBody.date = options.date;
+
+    const response = await fetch(`${API_CONFIG.BASE_URL}/rtsp/recognize`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'RTSP recognition failed');
+    }
+
+    return await response.json();
+  },
+
   // Period-based attendance
   getPeriodAttendance: async (date?: string, period?: string) => {
     const queryParams = new URLSearchParams();

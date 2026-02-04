@@ -15,7 +15,10 @@ try:
     redis_client.ping()
     logger.info(f"Connected to Redis at {REDIS_URL}")
 except Exception as e:
-    logger.error(f"Failed to connect to Redis: {str(e)}")
+    if "localhost" in REDIS_URL or "127.0.0.1" in REDIS_URL:
+        logger.warning(f"Redis not available locally ({str(e)}). Caching disabled.")
+    else:
+        logger.error(f"Failed to connect to Redis: {str(e)}")
     redis_client = None
 
 def cache_response(timeout=300, key_prefix="api_cache"):

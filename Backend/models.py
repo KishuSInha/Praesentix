@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, Float, JSON, Date, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
-from pgvector.sqlalchemy import Vector
+# from pgvector.sqlalchemy import Vector # Removed for SQLite
 from datetime import datetime
 
 Base = declarative_base()
@@ -30,7 +30,7 @@ class FaceEncoding(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     person_id = Column(String, unique=True, index=True)
-    embedding = Column(Vector(128)) # Using 128 for FaceNet as suggested
+    embedding = Column(JSON) # Storing list/array as JSON
     num_images = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
