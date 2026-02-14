@@ -2,229 +2,153 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Smart Attend Design System - Dark Mode Only
-All colors MUST be HSL.
+/* 
+  Praesentix Normal Evolution
+  Style: SaaS Professional, Normalized, Global Tech
+  Theme: High Contrast (Slate & White) with Vibrant Accent (#C4F582)
 */
 
 @layer base {
   :root {
-    /* Core Light Theme Colors */
     --background: 0 0% 100%;
-    --foreground: 0 0% 15%;
+    --foreground: 224 71.4% 4.1%;
 
-    /* Card Colors */
-    --card: 0 0% 98%;
-    --card-foreground: 0 0% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
 
-    /* Popover Colors */
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 15%;
+    --popover-foreground: 224 71.4% 4.1%;
 
-    /* Primary - Government Blue */
-    --primary: 220 100% 45%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 84 81% 73%;
+    /* #C4F582 - Vibrant Light Green */
+    --primary-foreground: 224 71.4% 4.1%;
+    /* Deep Slate for contrast on light green */
 
-    /* Secondary - Light Gray */
-    --secondary: 0 0% 95%;
-    --secondary-foreground: 0 0% 15%;
+    --secondary: 224 71.4% 4.1%;
+    /* Dark Slate for contrast sections */
+    --secondary-foreground: 0 0% 100%;
 
-    /* Muted - Subtle Gray */
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
 
-    /* Accent - Success Green */
-    --accent: 142 76% 36%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 84 81% 73%;
+    --accent-foreground: 224 71.4% 4.1%;
 
-    /* Destructive - Error Red */
-    --destructive: 0 84% 50%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
-    /* Borders and Inputs */
-    --border: 0 0% 85%;
-    --input: 0 0% 98%;
-    --ring: 220 100% 45%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 84 81% 73%;
 
-    /* Border Radius */
-    --radius: 0.75rem;
-
-    /* Warning Color */
-    --warning: 45 100% 45%;
-    --warning-foreground: 0 0% 100%;
-
-    /* Success Color */
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 100%;
-
-    /* Government System Specific Colors */
-    --student: 195 100% 40%;
-    --teacher: 270 100% 50%;
-    --admin: 30 100% 40%;
-    --education: 300 100% 45%;
-
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(220 100% 45%), hsl(220 100% 35%));
-    --gradient-light: linear-gradient(135deg, hsl(0 0% 98%), hsl(0 0% 95%));
-    --gradient-card: linear-gradient(135deg, hsl(0 0% 98%), hsl(0 0% 96%));
-
-    /* Shadows */
-    --shadow-sm: 0 2px 4px hsl(0 0% 0% / 0.1);
-    --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.15);
-    --shadow-lg: 0 8px 24px hsl(0 0% 0% / 0.2);
-    --shadow-glow: 0 0 20px hsl(220 100% 45% / 0.2);
-
-    /* Animations */
-    --transition-fast: all 0.15s ease-out;
-    --transition-normal: all 0.3s ease-out;
-    --transition-slow: all 0.5s ease-out;
+    --radius: 1rem;
   }
 }
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border selection:bg-primary/30;
   }
 
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  }
-
-  /* Ensure mobile-first touch targets */
-  button,
-  a,
-  input,
-  select {
-    min-height: 44px;
-    min-width: 44px;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+    min-height: 100vh;
   }
 }
 
 @layer components {
 
-  /* Role-specific card variants */
-  .card-student {
-    @apply bg-gradient-to-br from-card via-card to-card border border-[hsl(var(--student)/0.3)] shadow-lg;
-    background: linear-gradient(135deg, hsl(var(--card)), hsl(195 100% 5%));
+  /* High-Contrast Section Utilities */
+  .section-dark {
+    @apply bg-slate-950 text-white py-24 md:py-32;
   }
 
-  .card-teacher {
-    @apply bg-gradient-to-br from-card via-card to-card border border-[hsl(var(--teacher)/0.3)] shadow-lg;
-    background: linear-gradient(135deg, hsl(var(--card)), hsl(270 100% 5%));
+  .section-light {
+    @apply bg-white text-slate-950 py-24 md:py-32;
   }
 
-  .card-admin {
-    @apply bg-gradient-to-br from-card via-card to-card border border-[hsl(var(--admin)/0.3)] shadow-lg;
-    background: linear-gradient(135deg, hsl(var(--card)), hsl(30 100% 5%));
+  /* Normalized Components */
+  .btn-cta {
+    @apply px-8 py-4 rounded-full font-bold text-sm uppercase tracking-widest transition-all duration-300 active:scale-95 flex items-center justify-center gap-2;
+    background: #C4F582;
+    color: #020617;
+    /* Slate-950 */
   }
 
-  .card-education {
-    @apply bg-gradient-to-br from-card via-card to-card border border-[hsl(var(--education)/0.3)] shadow-lg;
-    background: linear-gradient(135deg, hsl(var(--card)), hsl(300 100% 5%));
+  .btn-cta:hover {
+    @apply opacity-90 shadow-[0_0_30px_rgba(196,245,130,0.3)];
+    transform: translateY(-2px);
   }
 
-  /* Animation classes */
-  .animate-fade-in {
-    animation: fadeIn 0.3s ease-out;
+  .btn-ghost-dark {
+    @apply px-8 py-4 rounded-full font-bold text-sm uppercase tracking-widest transition-all duration-300 border border-white/20 text-white hover:bg-white hover:text-slate-950;
   }
 
-  .animate-slide-up {
-    animation: slideUp 0.3s ease-out;
+  .btn-ghost-light {
+    @apply px-8 py-4 rounded-full font-bold text-sm uppercase tracking-widest transition-all duration-300 border border-slate-200 text-slate-600 hover:border-slate-950 hover:text-slate-950;
   }
 
-  .animate-scale-in {
-    animation: scaleIn 0.2s ease-out;
+  .nav-link {
+    @apply text-xs font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-white transition-colors;
   }
 
-  .animate-toast {
-    animation: toastSlide 0.3s ease-out;
+  .nav-link-light {
+    @apply text-xs font-bold uppercase tracking-[0.2em] text-slate-500 hover:text-slate-950 transition-colors;
   }
 
-  /* Custom button variants */
-  .btn-primary {
-    @apply bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg;
+  /* Simplified Cards */
+  .standard-card {
+    @apply bg-white border border-slate-100 p-8 rounded-2xl shadow-sm hover:shadow-xl hover:border-slate-200 transition-all duration-300;
   }
 
-  .btn-secondary {
-    @apply bg-secondary hover:bg-secondary/80 text-secondary-foreground px-6 py-3 rounded-lg font-medium transition-all duration-200 border border-border;
+  .label-caps {
+    @apply text-[10px] font-black uppercase tracking-[0.3em] text-slate-400;
   }
 
-  .btn-danger {
-    @apply bg-destructive hover:bg-destructive/90 text-destructive-foreground px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg;
+  .label-caps-accent {
+    @apply text-[10px] font-black uppercase tracking-[0.3em] text-[#C4F582];
   }
 
-  .btn-success {
-    @apply bg-accent hover:bg-accent/90 text-accent-foreground px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg;
+  /* Biometric Visuals (Normalized) */
+  .biometric-frame {
+    @apply relative border-2 border-dashed border-slate-200 rounded-3xl overflow-hidden bg-slate-50;
   }
 
-  /* Input styles */
-  .input-field {
-    @apply bg-input border border-border rounded-lg px-4 py-3 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200;
-  }
-
-  /* Card hover effects */
-  .card-hover {
-    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-1;
-  }
-
-  /* Status indicators */
-  .status-present {
-    @apply bg-accent/20 text-accent border border-accent/30;
-  }
-
-  .status-absent {
-    @apply bg-destructive/20 text-destructive border border-destructive/30;
-  }
-
-  .status-pending {
-    @apply bg-warning/20 text-warning border border-warning/30;
+  .scan-bar {
+    @apply absolute w-full h-1 bg-primary/40 shadow-[0_0_15px_rgba(196,245,130,0.5)] animate-scan;
   }
 }
 
-@keyframes fadeIn {
-  from {
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
     opacity: 0;
-    transform: translateY(10px);
   }
 
-  to {
+  20% {
     opacity: 1;
-    transform: translateY(0);
+  }
+
+  80% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
   }
 }
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Scrollbar (Minimalist) */
+::-webkit-scrollbar {
+  width: 6px;
 }
 
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
 }
 
-@keyframes toastSlide {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
 }

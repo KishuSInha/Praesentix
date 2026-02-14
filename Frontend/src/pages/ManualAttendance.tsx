@@ -1,10 +1,20 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Users, Clock, Check, Filter, Download } from "lucide-react";
-import { mockAPI, Student } from "../utils/mockData";
+import { ArrowLeft, Search, Users, Clock, Check, Filter, Download, UserPlus, ChevronRight, X, Calendar, RefreshCw } from "lucide-react";
 import apiService from "../utils/api";
 import { useToast } from "../hooks/useToast";
-import govEmblem from "../assets/government-emblem.svg";
+import Logo from "../components/Logo";
+import { motion, AnimatePresence } from "framer-motion";
+
+interface Student {
+  id: string;
+  name: string;
+  rollNumber: string;
+  class: string;
+  section: string;
+  isPresent?: boolean;
+  attendancePercentage?: number;
+}
 
 interface AttendanceModal {
   student: Student;
@@ -43,7 +53,7 @@ const ManualAttendance = () => {
     setIsLoading(true);
     try {
       const result = await apiService.getStudents(classFilter, sectionFilter);
-      const data = result.data || result; // Handle both direct array or wrapped response
+      const data = result.data || result;
       setStudents(data);
       setFilteredStudents(data);
     } catch (error) {
@@ -77,13 +87,10 @@ const ManualAttendance = () => {
   const markIndividualAttendance = async (student: Student, period: string, date: string) => {
     try {
       await apiService.markAttendance([student.id], period, date);
-
-      // Update student status optimistically
       setFilteredStudents(prev =>
-        prev.map(s => s.id === student.id ? { ...s, isPresent: true, lastAttendance: new Date().toISOString() } : s)
+        prev.map(s => s.id === student.id ? { ...s, isPresent: true } : s)
       );
-
-      showToast('success', 'Attendance Marked', `${student.name} marked present for ${period}`);
+      showToast('success', 'Attendance Marked', `${student.name} marked present`);
       closeAttendanceModal();
     } catch (error) {
       showToast('error', 'Failed to mark attendance', 'Please try again');
@@ -91,27 +98,16 @@ const ManualAttendance = () => {
   };
 
   const handleBulkAttendance = async () => {
-    if (selectedStudents.size === 0) {
-      showToast('warning', 'No students selected', 'Please select students first');
-      return;
-    }
-
+    if (selectedStudents.size === 0) return;
     if (!bulkAttendance.period) {
       showToast('warning', 'Period required', 'Please select a period');
       return;
     }
-
     try {
       await apiService.markAttendance(Array.from(selectedStudents), bulkAttendance.period, bulkAttendance.date);
-
-      // Update selected students optimistically
       setFilteredStudents(prev =>
-        prev.map(s => selectedStudents.has(s.id)
-          ? { ...s, isPresent: true, lastAttendance: new Date().toISOString() }
-          : s
-        )
+        prev.map(s => selectedStudents.has(s.id) ? { ...s, isPresent: true } : s)
       );
-
       showToast('success', 'Bulk Attendance Marked', `${selectedStudents.size} students marked present`);
       setSelectedStudents(new Set());
     } catch (error) {
@@ -122,213 +118,189 @@ const ManualAttendance = () => {
   const toggleStudentSelection = (studentId: string) => {
     setSelectedStudents(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(studentId)) {
-        newSet.delete(studentId);
-      } else {
-        newSet.add(studentId);
-      }
+      if (newSet.has(studentId)) newSet.delete(studentId);
+      else newSet.add(studentId);
       return newSet;
     });
   };
 
-  const selectAllVisible = () => {
-    setSelectedStudents(new Set(filteredStudents.map(s => s.id)));
-  };
-
-  const clearSelection = () => {
-    setSelectedStudents(new Set());
-  };
-
   const periods = [
-    "1st Period (9:00-10:00)",
-    "2nd Period (10:00-11:00)",
-    "3rd Period (11:00-12:00)",
-    "4th Period (12:00-1:00)",
-    "5th Period (2:00-3:00)",
-    "6th Period (3:00-4:00)"
+    "1st Period", "2nd Period", "3rd Period", "4th Period", "5th Period", "6th Period"
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      {/* Header */}
-      <header className="bg-primary text-primary-foreground shadow-md sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4 mb-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-              aria-label="Go back"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center space-x-3">
-              <img src={govEmblem} alt="Government Emblem" className="w-10 h-10" />
-              <div>
-                <h1 className="text-xl font-semibold">Manual Attendance Entry</h1>
-                <p className="text-sm opacity-90">Praesentix</p>
-              </div>
-            </div>
+    <div className="min-h-screen bg-slate-50 text-slate-950 font-['Outfit'] antialiased">
+      <header className="px-8 py-4 bg-white border-b border-slate-100 sticky top-0 z-50 flex items-center justify-between">
+        <div className="flex items-center gap-6">
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-50 rounded-full transition-colors text-slate-400 hover:text-slate-950">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <Logo size="sm" />
+          <div className="h-6 w-px bg-slate-100 hidden md:block" />
+          <h1 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 hidden md:block">
+            Management <span className="text-slate-950 uppercase">Faculty Access</span>
+          </h1>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="px-5 py-2 bg-slate-950 text-white rounded-full hidden sm:flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-[#C4F582] shadow-[0_0_10px_#C4F582]" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Secure System</span>
           </div>
+        </div>
+      </header>
 
-          {/* Search and Filters */}
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+      <main className="max-w-6xl mx-auto p-6 md:p-10 space-y-10">
+        <div className="flex flex-col md:flex-row gap-8 items-end justify-between">
+          <div className="flex-1 w-full space-y-4">
+            <div className="relative group">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-slate-950 transition-colors" />
               <input
                 type="text"
-                placeholder="Search by name or roll number..."
-                className="bg-white border border-gray-300 rounded-lg py-3 px-4 pl-10 w-full text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                placeholder="Search Student Records..."
+                className="w-full bg-white border border-slate-100 rounded-3xl py-5 pl-14 pr-4 text-sm font-bold focus:outline-none focus:border-slate-950 transition-all placeholder:text-slate-300 shadow-sm"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-
             <div className="flex flex-wrap gap-4">
               <select
-                className="bg-white border border-gray-300 rounded-lg py-3 px-4 min-w-[120px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className="bg-white border border-slate-100 rounded-2xl px-6 py-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-slate-950 transition-all cursor-pointer shadow-sm text-slate-500"
                 value={classFilter}
                 onChange={(e) => setClassFilter(e.target.value)}
               >
-                <option value="">All Classes</option>
+                <option value="">Classes: All</option>
                 <option value="9">Class 9</option>
                 <option value="10">Class 10</option>
                 <option value="11">Class 11</option>
                 <option value="12">Class 12</option>
               </select>
-
               <select
-                className="bg-white border border-gray-300 rounded-lg py-3 px-4 min-w-[120px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className="bg-white border border-slate-100 rounded-2xl px-6 py-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-slate-950 transition-all cursor-pointer shadow-sm text-slate-500"
                 value={sectionFilter}
                 onChange={(e) => setSectionFilter(e.target.value)}
               >
-                <option value="">All Sections</option>
+                <option value="">Sections: All</option>
                 <option value="A">Section A</option>
                 <option value="B">Section B</option>
                 <option value="C">Section C</option>
               </select>
             </div>
           </div>
+          <button className="bg-white border border-slate-100 h-fit py-4 px-8 rounded-full flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-950 hover:bg-slate-50 transition-all shadow-sm active:scale-95">
+            <Download className="w-4 h-4" /> Export Data
+          </button>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
-        {/* Bulk Actions */}
-        {selectedStudents.size > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6 animate-fade-in">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" />
-                <span className="font-medium">{selectedStudents.size} students selected</span>
+        {/* Bulk Action Bar */}
+        <AnimatePresence mode="wait">
+          {selectedStudents.size > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-slate-950 p-8 rounded-[3rem] shadow-2xl flex flex-col md:flex-row items-center gap-8 border border-white/10"
+            >
+              <div className="flex items-center gap-6">
+                <div className="w-14 h-14 bg-[#C4F582] rounded-full flex items-center justify-center shadow-lg">
+                  <Users className="w-7 h-7 text-slate-950" />
+                </div>
+                <div>
+                  <p className="label-caps-accent text-[#C4F582]/60">Batch Selection</p>
+                  <p className="font-bold text-2xl text-white tracking-tight">{selectedStudents.size} Students</p>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button onClick={selectAllVisible} className="btn-secondary text-sm py-2 px-4">
-                  Select All
-                </button>
-                <button onClick={clearSelection} className="btn-secondary text-sm py-2 px-4">
-                  Clear
-                </button>
-              </div>
-            </div>
 
-            <div className="grid md:grid-cols-3 gap-4 items-end">
-              <div>
-                <label className="block text-sm font-medium mb-2">Period</label>
-                <select
-                  className="input-field w-full"
-                  value={bulkAttendance.period}
-                  onChange={(e) => setBulkAttendance(prev => ({ ...prev, period: e.target.value }))}
+              <div className="h-12 w-px bg-white/10 hidden md:block" />
+
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                <div className="space-y-2">
+                  <p className="label-caps text-white/40 ml-1">Period Selection</p>
+                  <select
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-[10px] font-black uppercase tracking-widest text-white outline-none cursor-pointer hover:bg-white/10 transition-colors"
+                    value={bulkAttendance.period}
+                    onChange={(e) => setBulkAttendance(prev => ({ ...prev, period: e.target.value }))}
+                  >
+                    <option value="" className="text-slate-900">Select Period</option>
+                    {periods.map(p => <option key={p} value={p} className="text-slate-900">{p}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <p className="label-caps text-white/40 ml-1">Attendance Date</p>
+                  <input
+                    type="date"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-[10px] font-black uppercase text-white outline-none cursor-pointer hover:bg-white/10 transition-colors"
+                    value={bulkAttendance.date}
+                    onChange={(e) => setBulkAttendance(prev => ({ ...prev, date: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-4 w-full md:w-auto">
+                <button
+                  onClick={handleBulkAttendance}
+                  className="bg-[#C4F582] text-slate-950 flex-1 md:px-12 py-4 rounded-full text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-xl shadow-[#C4F582]/10"
                 >
-                  <option value="">Select Period</option>
-                  {periods.map(period => (
-                    <option key={period} value={period}>{period}</option>
-                  ))}
-                </select>
+                  Confirm Attendance
+                </button>
+                <button
+                  onClick={() => setSelectedStudents(new Set())}
+                  className="p-4 bg-white/5 hover:bg-white/10 rounded-full text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">Date</label>
-                <input
-                  type="date"
-                  className="input-field w-full"
-                  value={bulkAttendance.date}
-                  onChange={(e) => setBulkAttendance(prev => ({ ...prev, date: e.target.value }))}
-                />
-              </div>
-
-              <button
-                onClick={handleBulkAttendance}
-                className="btn-success"
-              >
-                <Check className="w-4 h-4 mr-2" />
-                Mark Present
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Students List */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-lg">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Students ({filteredStudents.length})
-              </h2>
-              <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors border border-gray-300">
-                <Download className="w-4 h-4 mr-2" />
-                Export CSV
-              </button>
+        {/* Directory Container */}
+        <div className="bg-white rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+            <div>
+              <h3 className="text-2xl font-bold text-slate-950 tracking-tight">Student Directory</h3>
+              <p className="label-caps text-slate-400 mt-1">{filteredStudents.length} Records found</p>
             </div>
           </div>
 
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-slate-50">
             {isLoading ? (
-              <div className="p-8 text-center text-muted-foreground">
-                Loading students...
+              <div className="p-24 text-center">
+                <RefreshCw className="w-10 h-10 animate-spin text-[#C4F582] mx-auto mb-6" />
+                <p className="label-caps-accent">Fetching Records...</p>
               </div>
             ) : filteredStudents.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                No students found
+              <div className="p-24 text-center">
+                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-8">
+                  <Users className="w-10 h-10 text-slate-200" />
+                </div>
+                <p className="label-caps text-slate-300">No students found matching search</p>
               </div>
             ) : (
-              filteredStudents.map((student) => (
-                <div
-                  key={student.id}
-                  className="p-4 hover:bg-secondary/20 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
+              filteredStudents.map((s) => (
+                <div key={s.id} className="p-8 hover:bg-slate-50 transition-all group flex items-center gap-8">
+                  <div className="relative flex items-center">
                     <input
                       type="checkbox"
-                      checked={selectedStudents.has(student.id)}
-                      onChange={() => toggleStudentSelection(student.id)}
-                      className="w-4 h-4 rounded border-border"
+                      checked={selectedStudents.has(s.id)}
+                      onChange={() => toggleStudentSelection(s.id)}
+                      className="w-6 h-6 rounded-lg border-slate-200 bg-slate-100 checked:bg-slate-950 checked:border-slate-950 disabled:opacity-30 transition-all cursor-pointer accent-slate-950"
                     />
-
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4">
-                        <div className="flex-1">
-                          <h3 className="font-medium text-foreground">{student.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Roll: {student.rollNumber} • Class: {student.class}{student.section}
-                          </p>
-                        </div>
-
-                        <div className="text-right">
-                          <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${student.isPresent ? 'status-present' : 'bg-muted'
-                            }`}>
-                            {student.isPresent ? 'Present Today' : `${student.attendancePercentage}% Overall`}
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => openAttendanceModal(student)}
-                          className="btn-primary py-2 px-4 text-sm"
-                        >
-                          Mark Present
-                        </button>
-                      </div>
+                  </div>
+                  <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-[#C4F582] group-hover:text-slate-950 group-hover:border-[#C4F582] transition-colors">
+                    {s.name.charAt(0)}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-slate-950 text-lg tracking-tight">{s.name}</h4>
+                    <p className="label-caps text-slate-400 mt-1">ID: {s.rollNumber} · Class {s.class}{s.section}</p>
+                  </div>
+                  <div className="hidden md:block text-right">
+                    <div className={`label-caps px-4 py-2 rounded-full border transition-all ${s.isPresent ? 'text-slate-950 border-[#C4F582] bg-[#C4F582]' : 'text-slate-400 border-slate-100 bg-slate-50'}`}>
+                      {s.isPresent ? 'Verified' : `${s.attendancePercentage || 0}% Frequency`}
                     </div>
                   </div>
+                  <button onClick={() => openAttendanceModal(s)} className="p-4 bg-white border border-slate-100 rounded-2xl group-hover:bg-slate-950 group-hover:border-slate-950 group-hover:text-white transition-all shadow-sm active:scale-95">
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
                 </div>
               ))
             )}
@@ -336,67 +308,64 @@ const ManualAttendance = () => {
         </div>
       </main>
 
-      {/* Attendance Modal */}
-      {modal.isOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-card rounded-lg shadow-lg max-w-md w-full animate-scale-in">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Mark Attendance</h3>
-
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Student</p>
-                  <p className="font-medium">{modal.student.name}</p>
-                  <p className="text-sm text-muted-foreground">Roll: {modal.student.rollNumber}</p>
+      {/* Manual Verification Modal */}
+      <AnimatePresence mode="wait">
+        {modal.isOpen && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 z-[100]">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="bg-white max-w-md w-full p-12 rounded-[4rem] border border-slate-100 shadow-2xl space-y-12"
+            >
+              <div className="text-center">
+                <div className="w-24 h-24 bg-slate-50 rounded-[3rem] flex items-center justify-center mx-auto mb-8 border border-slate-100">
+                  <UserPlus className="w-12 h-12 text-slate-950" />
                 </div>
+                <h3 className="text-3xl font-bold text-slate-950 mb-2 tracking-tight leading-tight">Manual <br />Adjustment</h3>
+                <p className="label-caps text-slate-400">Student: {modal.student.name}</p>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Period</label>
+              <div className="space-y-8">
+                <div className="space-y-3">
+                  <label className="label-caps text-slate-400 ml-1">Period Selection</label>
                   <select
-                    className="input-field w-full"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-[2rem] py-5 px-8 text-[10px] font-black uppercase tracking-widest outline-none focus:border-slate-950 transition-all cursor-pointer"
                     value={bulkAttendance.period}
                     onChange={(e) => setBulkAttendance(prev => ({ ...prev, period: e.target.value }))}
                   >
                     <option value="">Select Period</option>
-                    {periods.map(period => (
-                      <option key={period} value={period}>{period}</option>
-                    ))}
+                    {periods.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Date</label>
+                <div className="space-y-3">
+                  <label className="label-caps text-slate-400 ml-1">Attendance Date</label>
                   <input
                     type="date"
-                    className="input-field w-full"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-[2rem] py-5 px-8 text-[10px] font-black outline-none focus:border-slate-950 transition-all cursor-pointer"
                     value={bulkAttendance.date}
                     onChange={(e) => setBulkAttendance(prev => ({ ...prev, date: e.target.value }))}
                   />
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={closeAttendanceModal}
-                  className="btn-secondary flex-1"
-                >
-                  Cancel
-                </button>
+              <div className="flex gap-4">
+                <button onClick={closeAttendanceModal} className="flex-1 py-5 label-caps rounded-full border border-slate-100 hover:bg-slate-50 transition-colors text-slate-500 active:scale-95">Cancel</button>
                 <button
                   onClick={() => markIndividualAttendance(modal.student, bulkAttendance.period, bulkAttendance.date)}
-                  className="btn-success flex-1"
                   disabled={!bulkAttendance.period}
+                  className="flex-1 bg-[#C4F582] py-5 label-caps rounded-full text-slate-950 shadow-xl shadow-[#C4F582]/10 disabled:opacity-50 active:scale-95"
                 >
-                  <Check className="w-4 h-4 mr-2" />
-                  Mark Present
+                  Confirm
                 </button>
               </div>
-            </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
 export default ManualAttendance;
+

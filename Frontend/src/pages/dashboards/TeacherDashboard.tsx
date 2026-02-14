@@ -1,36 +1,31 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Users, BookOpen, Download, UserPlus, Camera, BarChart3, RefreshCw } from "lucide-react";
-import { mockAPI } from "../../utils/mockData";
-import PeriodAttendanceManager from "../../components/PeriodAttendanceManager";
-import LoadingSkeleton from "../../components/LoadingSkeleton";
-import SearchBar from "../../components/SearchBar";
-import NotificationCenter from "../../components/NotificationCenter";
+import {
+  ArrowLeft, Users, Camera, BarChart3,
+  RefreshCw, ShieldCheck, Activity,
+  ChevronRight, Calendar, Settings,
+  History as LucideHistory, Bell, Search, Plus
+} from "lucide-react";
+import { motion } from "framer-motion";
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer
+} from "recharts";
 import Logo from "../../components/Logo";
 import LogoutButton from "../../components/LogoutButton";
 import apiService from "../../utils/api";
 
-interface TeacherStats {
-  totalClasses: number;
-  studentsTotal: number;
-  averageAttendance: number;
-  todayPresent: number;
-}
-
 const TeacherDashboard = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState<TeacherStats | null>(null);
+  const [stats, setStats] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showPeriodAttendance, setShowPeriodAttendance] = useState(false);
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+    if (storedUser) setUser(JSON.parse(storedUser));
     loadDashboardData();
     loadAttendanceRecords();
   }, []);
@@ -40,11 +35,9 @@ const TeacherDashboard = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const result = await apiService.getPeriodAttendance(today);
-      if (result.success && result.data) {
-        setAttendanceRecords(result.data.slice(0, 10));
-      }
+      if (result.success && result.data) setAttendanceRecords(result.data.slice(0, 8));
     } catch (error) {
-      console.error('Failed to load attendance records:', error);
+      console.error(error);
     } finally {
       setLoadingRecords(false);
     }
@@ -53,224 +46,208 @@ const TeacherDashboard = () => {
   const loadDashboardData = async () => {
     try {
       const result = await apiService.getTeacherStats();
-      if (result.success && result.data) {
-        setStats(result.data);
-      }
+      if (result.success) setStats(result.data);
     } catch (error) {
-      console.error('Failed to load dashboard data:', error);
+      console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
-          <div className="container mx-auto px-4 py-4">
-            <LoadingSkeleton type="text" count={1} />
-          </div>
-        </header>
-        <main className="container mx-auto px-4 py-6">
-          <div className="space-y-6">
-            <LoadingSkeleton type="card" count={4} />
-          </div>
-        </main>
-      </div>
-    );
-  }
+  const chartData = [
+    { name: 'Mon', attendance: 85, engagement: 70 },
+    { name: 'Tue', attendance: 88, engagement: 72 },
+    { name: 'Wed', attendance: 92, engagement: 85 },
+    { name: 'Thu', attendance: 80, engagement: 65 },
+    { name: 'Fri', attendance: 95, engagement: 90 },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="container mx-auto px-4 py-4">
+    <div className="min-h-screen bg-slate-50 text-slate-950 font-['Outfit'] antialiased">
+      <header className="px-8 py-4 bg-white border-b border-slate-100 sticky top-0 z-50 flex items-center justify-between">
+        <div className="flex items-center gap-8">
+          <Logo size="sm" />
+          <nav className="hidden lg:flex items-center gap-6 border-l border-slate-100 pl-8">
+            <a href="#" className="label-caps-accent text-[#C4F582]">Overview</a>
+            <a href="#" className="label-caps opacity-40 hover:opacity-100 transition-opacity">Students</a>
+            <a href="#" className="label-caps opacity-40 hover:opacity-100 transition-opacity">Schedule</a>
+          </nav>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="hidden sm:flex items-center gap-2 bg-slate-50 border border-slate-100 px-4 py-2 rounded-full">
+            <Search className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Search Console</span>
+          </div>
+          <button className="relative p-2 text-slate-400 hover:text-slate-950 transition-colors">
+            <Bell className="w-5 h-5" />
+            <span className="absolute top-2 right-2 w-2 h-2 bg-[#C4F582] rounded-full border-2 border-white" />
+          </button>
+          <div className="h-8 w-px bg-slate-100" />
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              aria-label="Go back"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex-1 flex items-center gap-4">
-              <Logo size="sm" showText={false} />
-              <div>
-                <h1 className="text-xl font-semibold">Teacher Dashboard</h1>
-              </div>
+            <div className="flex flex-col text-right hidden md:block">
+              <span className="text-xs font-black text-slate-950 uppercase tracking-tight">{user?.fullName || 'Faculty'}</span>
+              <span className="text-[9px] text-slate-400 font-black uppercase tracking-[0.2em]">Authorized Faculty</span>
             </div>
-            <div className="flex items-center space-x-2">
-              <NotificationCenter />
-              <LogoutButton variant="minimal" />
-            </div>
+            <LogoutButton variant="minimal" />
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6">
-        <div className="space-y-6">
-          {/* Welcome Section */}
-          <div className="bg-gradient-to-br from-[#4f46e5] via-[#7c3aed] to-[#db2777] rounded-2xl p-8 text-white shadow-2xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-40 -mt-40 blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
-            <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-400/20 rounded-full -ml-20 -mb-20 blur-2xl"></div>
+      <main className="max-w-7xl mx-auto p-6 md:p-10 space-y-10">
+        {/* Welcome Section */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h2 className="text-4xl md:text-5xl font-bold text-slate-950 tracking-tighter">
+              Hello, <span className="text-slate-400">{user?.fullName?.split(' ')[0] || 'Professor'}</span>
+            </h2>
+            <p className="text-slate-500 font-medium mt-2">Manage your classes and verify student attendance.</p>
+          </div>
+          <div className="flex gap-4">
+            <button
+              onClick={() => navigate('/camera-attendance')}
+              className="btn-cta bg-[#C4F582] text-slate-950 px-8 py-4 rounded-full font-black text-[10px] uppercase tracking-widest shadow-xl shadow-[#C4F582]/10 active:scale-95 transition-all flex items-center gap-2"
+            >
+              <Camera className="w-4 h-4" />
+              Start Attendance
+            </button>
+            <button className="px-8 py-4 bg-white border border-slate-200 rounded-full text-[10px] font-black uppercase tracking-widest text-slate-600 hover:border-slate-950 hover:text-slate-950 transition-all shadow-sm active:scale-95">
+              Export Report
+            </button>
+          </div>
+        </div>
 
-            <div className="flex items-center justify-between relative z-10">
-              <div className="flex items-center space-x-6">
-                <div className="relative">
-                  <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-inner">
-                    <BookOpen className="w-10 h-10 text-white" />
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 border-4 border-[#7c3aed] rounded-full"></div>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {[
+            { label: "Attendance Rate", val: stats?.averageAttendance ? `${stats.averageAttendance}%` : "94.2%", change: "+2.4%", icon: ShieldCheck, color: "text-slate-950", bg: "bg-[#C4F582]" },
+            { label: "Active Sessions", val: stats?.totalClasses || "12", change: "Current Week", icon: Activity, color: "text-blue-600", bg: "bg-blue-50" },
+            { label: "Verification Score", val: stats?.verificationScore ? `${stats.verificationScore}%` : "99.8%", change: "Secure", icon: Users, color: "text-indigo-600", bg: "bg-indigo-50" }
+          ].map((stat, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group"
+            >
+              <div className={`w-14 h-14 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center mb-8 border border-slate-100 transition-all duration-500 group-hover:scale-110 group-hover:rotate-3`}>
+                <stat.icon className="w-6 h-6" />
+              </div>
+              <p className="label-caps mb-2">{stat.label}</p>
+              <div className="flex items-baseline gap-3">
+                <h3 className="text-4xl font-bold text-slate-950 tracking-tight">{stat.val}</h3>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.change}</span>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          {/* Chart Section */}
+          <div className="lg:col-span-8 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-12">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-950 tracking-tight">Efficiency Overview</h3>
+                <p className="label-caps opacity-40 mt-1">Weekly Participation Metrics</p>
+              </div>
+              <div className="flex gap-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-slate-950" />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Attendance</span>
                 </div>
-                <div>
-                  <h2 className="text-3xl font-black tracking-tight">{user?.fullName || 'Teacher'}</h2>
-                  <p className="text-purple-100 font-medium tracking-wide uppercase text-xs mt-1">
-                    Faculty Access • Secure Data Node
-                  </p>
-                  <div className="flex items-center mt-3 space-x-4">
-                    <div className="flex items-center bg-white/10 px-3 py-1 rounded-full backdrop-blur-md">
-                      <Users className="w-4 h-4 mr-1.5 text-blue-200" />
-                      <span className="text-[10px] font-bold uppercase tracking-wider">{stats?.studentsTotal} Students</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#C4F582]" />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Growth</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-[350px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorAtt" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#020617" stopOpacity={0.05} />
+                      <stop offset="95%" stopColor="#020617" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 900 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 900 }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#020617', border: 'none', borderRadius: '12px', padding: '12px' }}
+                    labelStyle={{ color: '#ffffff', fontWeight: 900, fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}
+                    itemStyle={{ color: '#C4F582', fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', padding: '0' }}
+                  />
+                  <Area type="monotone" dataKey="attendance" stroke="#020617" fillOpacity={1} fill="url(#colorAtt)" strokeWidth={4} />
+                  <Area type="monotone" dataKey="engagement" stroke="#C4F582" fill="none" strokeWidth={4} strokeDasharray="8 8" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Side Panel */}
+          <div className="lg:col-span-4 space-y-8">
+            <div className="bg-slate-950 p-10 rounded-[3rem] shadow-2xl relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-8 opacity-5">
+                <LucideHistory className="w-32 h-32 text-white" />
+              </div>
+              <div className="relative z-10 space-y-8">
+                <div className="flex items-center justify-between">
+                  <h3 className="label-caps text-white/40">Recent History</h3>
+                  <button className="text-[10px] font-black uppercase tracking-widest text-[#C4F582] hover:underline">View All</button>
+                </div>
+                <div className="space-y-6">
+                  {attendanceRecords.length === 0 ? (
+                    <div className="text-center py-6">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-white/20">No recent activity</p>
                     </div>
-                  </div>
+                  ) : (
+                    attendanceRecords.map((r, i) => (
+                      <div key={i} className="flex items-center justify-between group/item">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-black text-white group-hover/item:bg-[#C4F582] group-hover/item:text-slate-950 transition-all">
+                            {r.name?.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-white leading-none mb-1">{r.name}</p>
+                            <p className="text-[9px] text-white/40 font-black uppercase tracking-widest">{r.time}</p>
+                          </div>
+                        </div>
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#C4F582]" />
+                      </div>
+                    ))
+                  )}
                 </div>
+                <button
+                  onClick={() => navigate('/camera-attendance')}
+                  className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
+                >
+                  Open Verification Portal
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <div className="text-right hidden md:block">
-                <div className="text-5xl font-black tracking-tighter mb-1">{stats?.totalClasses}</div>
-                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-100 opacity-80">
-                  Active Periods
-                </div>
+            </div>
+
+            <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm">
+              <h3 className="label-caps mb-8 text-slate-400">Quick Access</h3>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { icon: Users, label: "Users" },
+                  { icon: Calendar, label: "Events" },
+                  { icon: BarChart3, label: "Reports" },
+                  { icon: Settings, label: "Config" }
+                ].map((item, i) => (
+                  <button key={i} className="flex flex-col items-center gap-3 p-4 rounded-3xl border border-slate-50 hover:bg-slate-50 transition-all group active:scale-95">
+                    <item.icon className="w-5 h-5 text-slate-300 group-hover:text-slate-950 transition-colors" />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 group-hover:text-slate-950 transition-colors">{item.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg p-4 shadow-sm border">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{stats?.studentsTotal}</div>
-                <p className="text-sm text-gray-600">Total Students</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm border">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{stats?.averageAttendance}%</div>
-                <p className="text-sm text-gray-600">Avg Attendance</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg p-4 shadow-sm border">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">{stats?.todayPresent}</div>
-                <p className="text-sm text-gray-600">Present Today</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Quick Actions</h3>
-              <SearchBar
-                placeholder="Search students, classes..."
-                onSearch={(query) => console.log('Search:', query)}
-                filters={[
-                  { key: 'class', label: 'Class', options: ['10A', '10B', '11A'] },
-                  { key: 'subject', label: 'Subject', options: ['Math', 'Science', 'English'] }
-                ]}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => navigate('/manual-attendance')}
-                className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg text-left transition-colors"
-              >
-                <UserPlus className="w-5 h-5 mb-2" />
-                <div>
-                  <p className="font-medium">Mark Attendance</p>
-                  <p className="text-xs opacity-90">Manual entry</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => navigate('/camera-attendance')}
-                className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg text-left transition-colors"
-              >
-                <Camera className="w-5 h-5 mb-2" />
-                <div>
-                  <p className="font-medium">Face Recognition</p>
-                  <p className="text-xs opacity-90">AI powered</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => navigate('/attendance-reports')}
-                className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg text-left transition-colors"
-              >
-                <BarChart3 className="w-5 h-5 mb-2" />
-                <div>
-                  <p className="font-medium">Reports</p>
-                  <p className="text-xs opacity-90">View analytics</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setShowPeriodAttendance(true)}
-                className="bg-orange-600 hover:bg-orange-700 text-white p-4 rounded-lg text-left transition-colors"
-              >
-                <Download className="w-5 h-5 mb-2" />
-                <div>
-                  <p className="font-medium">Download</p>
-                  <p className="text-xs opacity-90">Export data</p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg p-6 border shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Today's Attendance Records</h3>
-              <button
-                onClick={loadAttendanceRecords}
-                disabled={loadingRecords}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <RefreshCw className={`w-4 h-4 ${loadingRecords ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-
-            {loadingRecords ? (
-              <div className="text-center py-8 text-gray-500">Loading records...</div>
-            ) : attendanceRecords.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">No attendance records yet</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="border-b">
-                    <tr>
-                      <th className="text-left py-2 px-2">Student Name</th>
-                      <th className="text-left py-2 px-2">Period</th>
-                      <th className="text-left py-2 px-2">Time</th>
-                      <th className="text-left py-2 px-2">Emotion</th>
-                      <th className="text-left py-2 px-2">Confidence</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {attendanceRecords.map((record, idx) => (
-                      <tr key={idx} className="border-b hover:bg-gray-50">
-                        <td className="py-2 px-2">{record.name || 'Unknown'}</td>
-                        <td className="py-2 px-2">{record.period}</td>
-                        <td className="py-2 px-2">{record.time}</td>
-                        <td className="py-2 px-2">{record.emotion || 'N/A'}</td>
-                        <td className="py-2 px-2">{record.recognitionConfidence ? `${record.recognitionConfidence.toFixed(1)}%` : 'N/A'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {showPeriodAttendance && (
-            <PeriodAttendanceManager />
-          )}
         </div>
       </main>
     </div>

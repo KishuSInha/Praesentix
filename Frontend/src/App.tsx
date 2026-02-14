@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { ToastProvider } from "./hooks/useToast";
+import { AnimatePresence, motion } from "framer-motion";
 
 // Import pages
 import Landing from "./pages/Landing";
@@ -17,6 +18,7 @@ import NotFound from "./pages/NotFound";
 import LocationCheckPage from "./pages/LocationCheckPage";
 import UserManagementPage from "./pages/UserManagementPage";
 import Selection from "./pages/Selection";
+import { SyncManager } from "./components/SyncManager";
 
 const queryClient = new QueryClient();
 
@@ -47,12 +49,44 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const PageWrapper = ({ children }: { children: React.ReactNode }) => (
+  <motion.div
+    initial={{ opacity: 0, x: 10 }}
+    animate={{ opacity: 1, x: 0 }}
+    exit={{ opacity: 0, x: -10 }}
+    transition={{ duration: 0.3, ease: "easeOut" }}
+  >
+    {children}
+  </motion.div>
+);
+
+const AppRoutes = () => {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<PageWrapper><Landing /></PageWrapper>} />
+        <Route path="/login" element={<PageWrapper><Login /></PageWrapper>} />
+        <Route path="/selection" element={<PageWrapper><Selection /></PageWrapper>} />
+        <Route path="/manual-attendance" element={<PageWrapper><ManualAttendance /></PageWrapper>} />
+        <Route path="/camera-attendance-location" element={<PageWrapper><LocationCheckPage /></PageWrapper>} />
+        <Route path="/camera-attendance" element={<PageWrapper><CameraAttendance /></PageWrapper>} />
+        <Route path="/dashboard/teacher" element={<PageWrapper><TeacherDashboard /></PageWrapper>} />
+        <Route path="/dashboard/admin" element={<PageWrapper><AdminDashboard /></PageWrapper>} />
+        <Route path="/user-management" element={<PageWrapper><UserManagementPage /></PageWrapper>} />
+        <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
+      </Routes>
+    </AnimatePresence>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <ToastProvider>
         <Toaster />
         <Sonner />
+        <SyncManager />
         <BrowserRouter
           future={{
             v7_startTransition: true,
@@ -60,19 +94,7 @@ const App = () => (
           }}
         >
           <AuthHandler>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/selection" element={<Selection />} />
-              <Route path="/manual-attendance" element={<ManualAttendance />} />
-              <Route path="/camera-attendance-location" element={<LocationCheckPage />} />
-              <Route path="/camera-attendance" element={<CameraAttendance />} />
-              <Route path="/dashboard/teacher" element={<TeacherDashboard />} />
-              <Route path="/dashboard/admin" element={<AdminDashboard />} />
-              <Route path="/user-management" element={<UserManagementPage />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <AppRoutes />
           </AuthHandler>
         </BrowserRouter>
       </ToastProvider>

@@ -1,32 +1,23 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Shield, User, Lock, ArrowLeft, RefreshCcw, CheckCircle2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import Logo from "../components/Logo";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const Login = () => {
   const navigate = useNavigate();
-
   const [formData, setFormData] = useState({
     username: "",
     password: "",
-    userType: ""
+    userType: "teacher"
   });
-
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleChange = (field, value) =>
-    setFormData((prev) => ({ ...prev, [field]: value }));
-
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!formData.userType) {
-      alert("Please select a role");
-      return;
-    }
-
+    if (!formData.userType) return;
     setIsLoading(true);
 
     try {
@@ -41,187 +32,118 @@ const Login = () => {
       });
 
       const result = await response.json();
-
       if (result.success) {
         localStorage.setItem("currentUser", JSON.stringify(result.user));
-        if (result.token) {
-          localStorage.setItem("token", result.token);
-        }
+        if (result.token) localStorage.setItem("token", result.token);
         navigate(`/dashboard/${formData.userType}`);
-      } else {
-        alert(result.message || "Invalid credentials");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to connect to server");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-[#f6f6f4] text-[#0e0e0e]">
+    <div className="min-h-screen bg-white text-slate-950 font-['Outfit'] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      {/* Background Decor */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-10">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-100 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-slate-100 rounded-full blur-[120px]" />
+      </div>
 
-      {/* LEFT — EDITORIAL SIDE */}
-      <section className="relative hidden lg:flex flex-col justify-between px-20 py-16 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-neutral-100 via-neutral-50 to-neutral-200" />
+      <div className="w-full max-w-lg relative z-10 flex flex-col items-center">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-12"
+        >
+          <Logo size="lg" />
+        </motion.div>
 
-        <div className="relative z-10">
-          <Logo size="lg" showText />
-        </div>
-
-        <div className="relative z-10 max-w-xl">
-          <h1 className="text-[5.5vw] leading-[0.9] font-semibold tracking-tight">
-            Secure<br />
-            Digital<br />
-            Identity
-          </h1>
-
-          <p className="mt-6 text-sm text-neutral-500 max-w-md">
-            A minimal authentication layer designed for distributed
-            education systems.
-          </p>
-        </div>
-
-        <div className="relative z-10 text-[10px] tracking-widest text-neutral-400 uppercase">
-          © {new Date().getFullYear()} · Access Protocol
-        </div>
-      </section>
-
-      {/* RIGHT — HIGH-END AUTH INTERFACE */}
-      <section className="relative flex items-center justify-center px-8 sm:px-16 lg:px-24 bg-[#f6f6f4]">
-
-        {/* Architectural guide lines */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute left-0 top-0 h-full w-px bg-black/10" />
-          <div className="absolute right-0 top-0 h-full w-px bg-black/5" />
-        </div>
-
-        <div className="relative w-full max-w-md">
-
-          {/* TOP META */}
-          <div className="flex items-center justify-between mb-20">
-            <button
-              onClick={() => navigate(-1)}
-              className="text-[10px] tracking-widest uppercase text-neutral-400 hover:text-black transition"
-            >
-              ← Back
-            </button>
-
-            <span className="text-[10px] tracking-widest uppercase text-neutral-400">
-              Authentication
-            </span>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full bg-white border border-slate-100 rounded-[2.5rem] p-10 md:p-14 shadow-2xl space-y-10"
+        >
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-black text-slate-950 uppercase tracking-tight">Security Login</h1>
+            <p className="text-slate-400 text-sm font-bold uppercase tracking-[0.1em]">Verify your identity to proceed</p>
           </div>
 
-          {/* TITLE */}
-          <div className="mb-20">
-            <h2 className="text-4xl font-semibold tracking-tight leading-tight">
-              System Access
-            </h2>
-            <p className="mt-4 text-sm text-neutral-500 leading-relaxed max-w-sm">
-              Verify your identity to access the Praesentix secure platform.
-            </p>
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Role Switcher */}
+            <div className="flex p-1.5 bg-slate-50 rounded-2xl border border-slate-100 gap-1.5">
+              {['teacher', 'admin'].map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, userType: role })}
+                  className={`flex-1 py-3 text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all ${formData.userType === role
+                    ? 'bg-slate-950 text-white shadow-xl'
+                    : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
 
-          {/* FORM */}
-          <form onSubmit={handleSubmit} className="space-y-16">
-
-            {/* ROLE SELECT */}
-            <section>
-              <p className="text-[9px] tracking-widest uppercase text-neutral-400 mb-6">
-                Access Role
-              </p>
-
-              <div className="space-y-3">
-                {["teacher", "admin"].map((role) => (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => handleChange("userType", role)}
-                    className={`
-                      w-full flex items-center justify-between
-                      py-4 px-5
-                      border text-left transition-all
-                      ${formData.userType === role
-                        ? "border-black text-black"
-                        : "border-neutral-300 text-neutral-400 hover:border-black"
-                      }
-                    `}
-                  >
-                    <span className="uppercase tracking-widest text-[11px]">
-                      {role}
-                    </span>
-
-                    {formData.userType === role && (
-                      <span className="text-xs tracking-widest">SELECTED</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* CREDENTIALS */}
-            <section className="space-y-12">
-              <div className="border-b border-neutral-300 focus-within:border-black transition">
-                <label className="block text-[9px] tracking-widest uppercase text-neutral-400 mb-2">
-                  User Identifier
-                </label>
+            <div className="space-y-4">
+              <div className="relative group">
+                <User className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-slate-950 transition-colors" />
                 <input
                   type="text"
-                  required
-                  placeholder="Institution ID"
+                  placeholder="Username / Email"
                   value={formData.username}
-                  onChange={(e) => handleChange("username", e.target.value)}
-                  className="w-full bg-transparent py-3 text-xl outline-none"
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-5 pl-14 pr-4 text-sm font-bold focus:outline-none focus:border-slate-950 transition-all placeholder:text-slate-300 ring-0"
                 />
               </div>
 
-              <div className="border-b border-neutral-300 focus-within:border-black transition">
-                <label className="block text-[9px] tracking-widest uppercase text-neutral-400 mb-2">
-                  Access Key
-                </label>
+              <div className="relative group">
+                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-slate-950 transition-colors" />
                 <input
                   type="password"
-                  required
-                  placeholder="••••••••"
+                  placeholder="Password"
                   value={formData.password}
-                  onChange={(e) => handleChange("password", e.target.value)}
-                  className="w-full bg-transparent py-3 text-xl outline-none"
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-5 pl-14 pr-4 text-sm font-bold focus:outline-none focus:border-slate-950 transition-all placeholder:text-slate-300 ring-0"
                 />
               </div>
-            </section>
+            </div>
 
-            {/* ACTION */}
-            <section className="pt-8">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="
-                  group w-full flex items-center justify-between
-                  border border-black px-6 py-5
-                  text-[10px] tracking-[0.35em] uppercase
-                  transition-all duration-300
-                  hover:bg-black hover:text-white
-                  active:scale-[0.98]
-                  disabled:opacity-50
-                "
-              >
-                {isLoading ? "Authenticating" : "Enter System"}
-                <ChevronRight
-                  size={14}
-                  className="opacity-0 group-hover:opacity-100 transition"
-                />
-              </button>
-            </section>
+            <button
+              type="submit"
+              disabled={isLoading || !formData.userType}
+              className="bg-[#C4F582] text-slate-950 w-full rounded-full py-5 text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-xl shadow-[#C4F582]/10"
+            >
+              {isLoading ? (
+                <RefreshCcw className="w-4 h-4 animate-spin text-slate-950" />
+              ) : (
+                <>
+                  Connect Securely
+                  <ChevronRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
           </form>
 
-          {/* FOOTNOTE */}
-          <p className="mt-24 text-[9px] tracking-widest uppercase text-neutral-400">
-            Secure session · Encrypted channel · Real-time validation
-          </p>
-        </div>
-      </section>
+          <div className="flex items-center justify-center pt-2">
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-950 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back to Dashboard
+            </button>
+          </div>
+        </motion.div>
 
+        <div className="mt-12 text-center opacity-30">
+          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Praesentix Biometrics System</p>
+        </div>
+      </div>
     </div>
   );
 };

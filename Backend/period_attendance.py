@@ -4,11 +4,13 @@ import csv
 import io
 from database import get_db
 from models import Attendance, Notification
+from logging_config import logger
 from sqlalchemy import desc, text
 from sqlalchemy.exc import IntegrityError
 
 def mark_period_attendance(student_id, name, date_str, period, emotion="Neutral", 
-                          liveness_confidence=75.0, recognition_confidence=85.0, is_live=True, db=None):
+                          liveness_confidence=75.0, recognition_confidence=85.0, 
+                          is_live=True, is_offline_sync=False, trust_score_impact=0.0, db=None):
     """Mark attendance for a specific period."""
     should_close = False
     if db is None:
@@ -22,7 +24,10 @@ def mark_period_attendance(student_id, name, date_str, period, emotion="Neutral"
         
         # Convert date_str (YYYY-MM-DD) to date object
         try:
-            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+            if isinstance(date_str, str):
+                date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+            else:
+                date_obj = date_str
         except ValueError:
             # Fallback if already a date object or different format
             date_obj = datetime.now().date()
@@ -38,6 +43,8 @@ def mark_period_attendance(student_id, name, date_str, period, emotion="Neutral"
             spoof_status=spoofing_status,
             liveness_confidence=float(liveness_confidence),
             recognition_confidence=float(recognition_confidence),
+            is_offline_sync=is_offline_sync,
+            trust_score_impact=float(trust_score_impact),
             timestamp=datetime.utcnow()
         )
         
@@ -54,7 +61,7 @@ def mark_period_attendance(student_id, name, date_str, period, emotion="Neutral"
         db.add(new_notification)
         
         db.commit()
-        print(f"[DEBUG] Successfully marked attendance and created notification for {student_id}", flush=True)
+        logger.info(f"[DEBUG] Successfully marked attendance and created notification for {student_id} in period {period}")
         return True, "Attendance marked successfully"
         
     except IntegrityError:
@@ -96,7 +103,7 @@ def get_period_attendance(date_str=None, period=None, class_filter=None):
             results.append((
                 r.id, r.student_id, r.name, r.date, r.period, r.time, 
                 r.emotion, r.spoof_status, r.liveness_confidence, 
-                r.recognition_confidence, r.timestamp
+                r.recognition_confidence, r.timestamp, r.trust_score_impact
             ))
             
         return results

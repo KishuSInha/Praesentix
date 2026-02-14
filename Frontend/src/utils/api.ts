@@ -309,6 +309,32 @@ const apiService = {
       throw new Error(errorData.message || errorData.error || 'Failed to enroll student');
     }
     return await response.json();
+  },
+
+  // Engagement & Sync
+  sendEngagementHeartbeat: async (data: { studentId: string; sessionId?: string; isFocused: boolean; drowsinessDetected: boolean }) => {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/engagement/heartbeat`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  },
+
+  getEngagementScore: async (studentId: string) => {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/student/${studentId}/engagement`, {
+      headers: getAuthHeaders()
+    });
+    return await response.json();
+  },
+
+  syncOfflineAttendance: async (records: any[]) => {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/api/sync/attendance`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ records })
+    });
+    return await response.json();
   }
 };
 

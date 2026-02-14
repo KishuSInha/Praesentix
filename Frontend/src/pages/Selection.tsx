@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { LogIn, Camera, ArrowLeft } from "lucide-react";
-import govEmblem from "../assets/government-emblem.svg";
+import { LogIn, Camera, ArrowLeft, Shield, Zap, Globe, Lock, ArrowRight, Activity } from "lucide-react";
+import { motion } from "framer-motion";
+import Logo from "../components/Logo";
 
 const Selection = () => {
   const navigate = useNavigate();
@@ -8,106 +9,90 @@ const Selection = () => {
   const options = [
     {
       id: "login",
-      title: "System Login",
-      description: "Access your dashboard with secure authentication",
-      icon: LogIn,
-      color: "bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200",
+      title: "Management Portal",
+      subtitle: "Administration",
+      description: "Secure access to institutional controls, attendance analytics, and system configuration.",
+      icon: Shield,
       action: () => navigate("/login")
     },
     {
       id: "camera",
-      title: "Face Recognition Attendance",
-      description: "Quick attendance marking using advanced AI technology",
+      title: "Biometric Entry",
+      subtitle: "Verification",
+      description: "Quick-access biometric scanning for instant presence verification and automated reporting.",
       icon: Camera,
-      color: "bg-gradient-to-br from-green-50 to-green-100 border-green-200",
       action: () => navigate("/camera-attendance")
     }
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      {/* Header */}
-      <header className="bg-primary text-primary-foreground shadow-md">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-              aria-label="Go back"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center space-x-3">
-              <img src={govEmblem} alt="Government Emblem" className="w-10 h-10" />
-              <div>
-                <h1 className="text-xl font-semibold">Praesentix Access Portal</h1>
-                <p className="text-sm opacity-90">Choose your preferred access method</p>
+    <div className="min-h-screen bg-white text-slate-950 font-['Outfit'] overflow-hidden relative flex flex-col items-center justify-center p-6">
+      {/* Background Decor */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-5">
+        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-[#C4F582] rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-slate-200 rounded-full blur-[120px]" />
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-16 relative z-10"
+      >
+        <Logo size="lg" />
+      </motion.div>
+
+      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
+        {options.map((option, index) => (
+          <motion.div
+            key={option.id}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 * index }}
+            onClick={option.action}
+            className="group cursor-pointer bg-white border border-slate-100 p-10 rounded-[2rem] shadow-sm hover:shadow-2xl hover:border-slate-200 transition-all duration-300 flex flex-col justify-between"
+          >
+            <div className="space-y-8">
+              <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-[#C4F582] group-hover:text-slate-950 transition-all duration-500">
+                <option.icon className="w-7 h-7" />
+              </div>
+
+              <div className="space-y-4">
+                <p className="label-caps">{option.subtitle}</p>
+                <h2 className="text-3xl font-bold tracking-tight text-slate-950">
+                  {option.title}
+                </h2>
+                <p className="text-slate-500 text-base leading-relaxed font-medium">
+                  {option.description}
+                </p>
               </div>
             </div>
-          </div>
-        </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
-          {options.map((option, index) => {
-            const IconComponent = option.icon;
-            return (
-              <div
-                key={option.id}
-                className={`${option.color} rounded-2xl p-8 border shadow-lg cursor-pointer card-hover transition-all duration-300 hover:shadow-xl`}
-                onClick={option.action}
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <div className="flex items-center gap-6">
-                  <div className="flex-shrink-0">
-                    <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center shadow-md">
-                      <IconComponent className="w-8 h-8 text-primary" />
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1">
-                    <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                      {option.title}
-                    </h2>
-                    <p className="text-gray-600 text-lg">
-                      {option.description}
-                    </p>
-                  </div>
-
-                  <div className="flex-shrink-0 opacity-50">
-                    <ArrowLeft className="w-6 h-6 rotate-180" />
-                  </div>
-                </div>
+            <div className="mt-12">
+              <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-slate-950 transition-colors">
+                <span>Enter Portal</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
-            );
-          })}
-        </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
 
-        {/* Quick Stats */}
-        <div className="mt-12 bg-white rounded-2xl p-8 shadow-lg border border-gray-200">
-          <h3 className="text-2xl font-semibold mb-6 text-gray-900">System Overview</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-primary mb-2">2,500+</div>
-              <div className="text-sm text-gray-600">Active Users</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-green-600 mb-2">150+</div>
-              <div className="text-sm text-gray-600">Institutions</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-orange-600 mb-2">25+</div>
-              <div className="text-sm text-gray-600">Districts</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-purple-600 mb-2">98%</div>
-              <div className="text-sm text-gray-600">Accuracy</div>
-            </div>
-          </div>
+      {/* Simplified Status Footer */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.6 }}
+        className="mt-20 flex items-center gap-12 opacity-30 grayscale"
+      >
+        <div className="flex items-center gap-3">
+          <Activity className="w-4 h-4" />
+          <span className="text-[10px] font-black uppercase tracking-widest">Network Operational</span>
         </div>
-      </main>
+        <div className="flex items-center gap-3">
+          <Lock className="w-4 h-4" />
+          <span className="text-[10px] font-black uppercase tracking-widest">AES-256 Encrypted</span>
+        </div>
+      </motion.div>
     </div>
   );
 };

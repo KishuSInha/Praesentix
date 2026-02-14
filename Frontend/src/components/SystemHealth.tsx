@@ -27,7 +27,7 @@ const SystemHealth = () => {
           icon: <Server className="w-4 h-4" />
         },
         {
-          name: 'Network',
+          name: 'Network Status',
           value: Math.floor(Math.random() * 25) + 75,
           status: 'good',
           icon: <Wifi className="w-4 h-4" />
@@ -43,35 +43,35 @@ const SystemHealth = () => {
     };
 
     updateMetrics();
-    const interval = setInterval(updateMetrics, 30000); // Update every 30 seconds
+    const interval = setInterval(updateMetrics, 30000);
     return () => clearInterval(interval);
   }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'good': return 'text-green-600 bg-green-100';
-      case 'warning': return 'text-yellow-600 bg-yellow-100';
-      case 'error': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'good': return 'text-slate-950 bg-[#C4F582]';
+      case 'warning': return 'text-amber-600 bg-amber-50';
+      case 'error': return 'text-white bg-slate-950';
+      default: return 'text-slate-400 bg-slate-50';
     }
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border">
-      <h3 className="text-sm font-semibold mb-3 flex items-center">
-        <Activity className="w-4 h-4 mr-2" />
+    <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-6">
+      <h3 className="label-caps !text-slate-950 flex items-center gap-3">
+        <Activity className="w-4 h-4 text-slate-400" />
         System Health
       </h3>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {metrics.map((metric) => (
-          <div key={metric.name} className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className={`p-1 rounded ${getStatusColor(metric.status)}`}>
+          <div key={metric.name} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-xl border border-white/20 shadow-sm ${getStatusColor(metric.status)}`}>
                 {metric.icon}
               </div>
-              <span className="text-xs">{metric.name}</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">{metric.name}</span>
             </div>
-            <span className="text-xs font-medium">{metric.value}%</span>
+            <span className="text-xs font-black text-slate-950">{metric.value}%</span>
           </div>
         ))}
       </div>

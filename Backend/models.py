@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, JSON, Date, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, JSON, Date, UniqueConstraint, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 # from pgvector.sqlalchemy import Vector # Removed for SQLite
 from datetime import datetime
@@ -20,6 +20,10 @@ class Attendance(Base):
     spoof_status = Column(String, default='LIVE')
     liveness_confidence = Column(Float, default=75.0)
     recognition_confidence = Column(Float, default=85.0)
+    
+    # NEW FIELDS for Offline Mode & Trust Score
+    is_offline_sync = Column(Boolean, default=False)
+    trust_score_impact = Column(Float, default=0.0) # How much this record affected the score
 
     __table_args__ = (
         UniqueConstraint('student_id', 'date', 'period', name='unique_attendance'),
@@ -53,3 +57,17 @@ class User(Base):
     role = Column(String) # student, teacher, admin, education
     full_name = Column(String)
     student_id = Column(String, nullable=True) # For student role linking
+    
+    # NEW FIELDS for Trust Score
+    trust_score = Column(Float, default=100.0)
+
+class EngagementLog(Base):
+    __tablename__ = "engagement_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(String, index=True)
+    session_id = Column(String, index=True) # To group continuous periods
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    is_focused = Column(Boolean, default=True) # Looking at screen/teacher
+    drowsiness_detected = Column(Boolean, default=False)
+    

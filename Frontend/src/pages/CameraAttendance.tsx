@@ -1,25 +1,25 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
-  Camera,
-  Scan,
-  RefreshCw,
+  Settings,
+  History,
+  WifiOff,
   CheckCircle,
-  AlertCircle,
-  Info
+  XCircle,
+  Clock,
+  LayoutGrid,
+  Shield,
+  Calendar,
+  Zap,
+  UserCheck
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { LivenessScanner } from "../components/LivenessScanner";
 import { useToast } from "../hooks/useToast";
-import praesentixLogo from "../assets/Praesentix.png";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { offlineStorage } from "../lib/offline-storage";
+import api from "../utils/api";
+import Logo from "../components/Logo";
 
 interface DetectedFace {
   name: string;
@@ -30,426 +30,263 @@ interface DetectedFace {
   attendanceAlreadyMarked?: boolean;
   recognitionConfidence?: number;
   livenessConfidence?: number;
+  currentTrustScore?: number;
 }
 
 const CameraAttendance = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationFrameId = useRef<number | null>(null);
-
-  const [isStreamActive, setIsStreamActive] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
   const [currentPeriod, setCurrentPeriod] = useState("");
-  const [attendanceDate, setAttendanceDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
-  const [showAlreadyMarkedDialog, setShowAlreadyMarkedDialog] = useState(false);
-  const [alreadyMarkedStudents, setAlreadyMarkedStudents] = useState<string[]>(
-    []
-  );
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
-
-  // RTSP State
-  const [cameraSource, setCameraSource] = useState<'device' | 'rtsp'>('device');
-  const [rtspUrl, setRtspUrl] = useState('');
-  const [rtspPreviewImage, setRtspPreviewImage] = useState<string | null>(null);
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [isClassroomMode, setIsClassroomMode] = useState(false);
 
   const periods = [
-    "1st Period (9:00-10:00)",
-    "2nd Period (10:00-11:00)",
-    "3rd Period (11:00-12:00)",
-    "4th Period (12:00-1:00)",
-    "5th Period (2:00-3:00)",
-    "6th Period (3:00-4:00)",
+    "1st Period", "2nd Period", "3rd Period", "4th Period", "5th Period", "6th Period"
   ];
 
   useEffect(() => {
-    return () => stopCamera();
+    const handleStatus = () => setIsOffline(!navigator.onLine);
+    window.addEventListener('online', handleStatus);
+    window.addEventListener('offline', handleStatus);
+    return () => {
+      window.removeEventListener('online', handleStatus);
+      window.removeEventListener('offline', handleStatus);
+    };
   }, []);
 
-  const startCamera = async () => {
-    if (cameraSource === 'rtsp') {
-      await testRtspConnection();
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode },
-      });
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setIsStreamActive(true);
-        showToast("success", "Camera Ready", "You can start scanning");
-      }
-    } catch (error: any) {
-      showToast("error", "Camera Error", error.message);
-    }
-  };
-
-  const testRtspConnection = async () => {
-    if (!rtspUrl) {
-      showToast("warning", "Missing URL", "Please enter an RTSP URL");
-      return;
-    }
-
-    // Validation for placeholders and incomplete IPs
-    if (rtspUrl.includes('XX') || rtspUrl.includes('*') || rtspUrl.includes('IP_ADDRESS') || rtspUrl.includes('.x:') || rtspUrl.includes('.x/')) {
-      showToast("error", "Incomplete IP Address", "Please replace 'x' or placeholders with the complete IP address digits (e.g., 223.231.237.123)");
-      return;
-    }
-
-    // Check for incomplete IP patterns like ending with .x
-    const ipMatch = rtspUrl.match(/@(\d+\.\d+\.\d+\.(\w+)):/);
-    if (ipMatch && (ipMatch[2] === 'x' || ipMatch[2] === 'X' || ipMatch[2].includes('*'))) {
-      showToast("error", "Incomplete IP Address", `Replace '${ipMatch[1]}' with your complete camera IP (all 4 numbers)`);
-      return;
-    }
-
-    if (rtspUrl.includes('admin:password')) {
-      showToast("warning", "Check Credentials", "You are using default 'admin:password'. Ensure these are correct.");
-    }
-
-    setIsScanning(true); // Reuse scanning state for loading
-    try {
-      const apiService = (await import("../utils/api")).default;
-      const result = await apiService.getRtspPreview(rtspUrl);
-      if (result.success && result.image) {
-        setRtspPreviewImage(`data:image/jpeg;base64,${result.image}`);
-        setIsStreamActive(true);
-        showToast("success", "Connection Successful", "Camera connected");
-      }
-    } catch (e: any) {
-      showToast("error", "Connection Failed", e.message);
-      setIsStreamActive(false);
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
-  const stopCamera = () => {
-    if (cameraSource === 'device') {
-      if (videoRef.current?.srcObject) {
-        (videoRef.current.srcObject as MediaStream)
-          .getTracks()
-          .forEach((t) => t.stop());
-        videoRef.current.srcObject = null;
-      }
-    }
-    if (animationFrameId.current) {
-      cancelAnimationFrame(animationFrameId.current);
-    }
-    setIsStreamActive(false);
-    setDetectedFaces([]);
-    setIsScanning(false);
-    setRtspPreviewImage(null);
-  };
-
-  const toggleCamera = () => {
-    setFacingMode((p) => (p === "user" ? "environment" : "user"));
-    stopCamera();
-    setTimeout(startCamera, 200);
-  };
-
-  const startScanning = async () => {
+  const handleLivenessSuccess = async (images: string[]) => {
     if (!currentPeriod) {
-      showToast("warning", "Select Period", "Please select a class period");
+      showToast("warning", "Missing Info", "Please select a period first");
+      setIsScanning(false);
       return;
     }
 
-    setIsScanning(true);
-    setDetectedFaces([]);
-
-    const apiService = (await import("../utils/api")).default;
-
     try {
-      let result;
-
-      if (cameraSource === 'device') {
-        if (!videoRef.current || !canvasRef.current) return;
-        const canvas = canvasRef.current;
-        const video = videoRef.current;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-
-        canvas.width = 640;
-        canvas.height = 480;
-
-        const captureFrame = async () => {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const blob = await new Promise<Blob | null>((res) =>
-            canvas.toBlob(res, "image/jpeg", 0.7)
-          );
-          if (!blob) return null;
-
-          return new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => {
-              const base64 = (reader.result as string).split(",")[1];
-              resolve(base64);
-            };
-          });
-        };
-
-        // Capture 3 frames with 200ms delay
-        const frames: string[] = [];
-        for (let i = 0; i < 3; i++) {
-          const frame = await captureFrame();
-          if (frame) frames.push(frame);
-          if (i < 2) await new Promise(r => setTimeout(r, 200));
-        }
-
-        if (frames.length === 0) {
-          setIsScanning(false);
-          return;
-        }
-
-        result = await apiService.recognizeFace(frames, {
-          period: currentPeriod,
-          date: attendanceDate,
-        });
-
-      } else {
-        // RTSP Mode
-        result = await apiService.recognizeRtsp(rtspUrl, {
-          period: currentPeriod,
-          date: attendanceDate
-        });
-      }
+      showToast("info", "Processing", isClassroomMode ? "Analyzing group capture..." : "Verifying identity...");
+      const result = await api.recognizeFace(images, {
+        period: currentPeriod,
+        date: attendanceDate,
+      });
 
       if (result.success) {
         setDetectedFaces(result.detectedFaces);
-
-        const already = result.detectedFaces
-          .filter((f: any) => f.attendanceAlreadyMarked)
-          .map((f: any) => `${f.name} (${f.rollNumber})`);
-
-        if (already.length > 0) {
-          setAlreadyMarkedStudents(already);
-          setShowAlreadyMarkedDialog(true);
-        }
+        const recognized = result.detectedFaces.filter((f: any) => f.name !== 'Unknown').length;
+        showToast("success", "Recognition Complete", `Identified ${recognized} student(s)`);
       } else {
-        showToast("info", "No Faces", "No students detected");
+        if (isOffline) {
+          showToast("info", "Offline Mode", "Attendance queued for sync");
+        } else {
+          showToast("info", "No Match", "No recognized faces in the frame");
+        }
       }
-    } catch (e: any) {
-      showToast("error", "Scan Failed", e.message);
+    } catch (err) {
+      showToast("error", "Error", "Failed to process identification");
     } finally {
       setIsScanning(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-['Outfit'] antialiased">
+      <header className="px-8 py-4 bg-white border-b border-slate-100 sticky top-0 z-50 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-6">
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-50 rounded-full transition-colors text-slate-400 hover:text-emerald-600">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <Logo size="sm" />
+          <div className="h-6 w-px bg-slate-100 hidden md:block" />
+          <div>
+            <h1 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">
+              Biometric Relay <span className="text-emerald-600 italic">v4.0</span>
+            </h1>
+          </div>
+        </div>
 
-      {/* HEADER */}
-      <header className="bg-white border-b px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate(-1)}>
-          <ArrowLeft />
-        </button>
-        <img src={praesentixLogo} className="w-8 h-8" />
-        <h1 className="font-semibold">Camera Attendance</h1>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 px-4 py-2 rounded-2xl">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Classroom Mode</span>
+            <button
+              onClick={() => setIsClassroomMode(!isClassroomMode)}
+              className={`w-10 h-5 rounded-full transition-colors relative ${isClassroomMode ? 'bg-[#C4F582]' : 'bg-slate-200'}`}
+            >
+              <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${isClassroomMode ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
+          {isOffline && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-amber-50 text-amber-600 border border-amber-100 rounded-full text-[10px] font-black uppercase tracking-wider">
+              <WifiOff className="w-3.5 h-3.5" /> Local Only
+            </div>
+          )}
+          <button className="p-2.5 hover:bg-slate-50 rounded-xl transition-colors text-slate-400">
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
       </header>
 
-      {/* CONTROLS */}
-      <section className="px-4 py-4 space-y-3 bg-white border-b">
+      <main className="max-w-7xl mx-auto p-6 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-10">
 
-        <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
-          <button
-            className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${cameraSource === 'device' ? 'bg-white shadow' : 'text-gray-500 hover:text-gray-900'}`}
-            onClick={() => { setCameraSource('device'); stopCamera(); }}
-          >
-            Device Camera
-          </button>
-          <button
-            className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${cameraSource === 'rtsp' ? 'bg-white shadow' : 'text-gray-500 hover:text-gray-900'}`}
-            onClick={() => { setCameraSource('rtsp'); stopCamera(); }}
-          >
-            External Camera (IP)
-          </button>
-        </div>
+        {/* Left: Configuration & Logs */}
+        <div className="lg:col-span-4 space-y-8 order-2 lg:order-1">
+          <section className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
+            <h2 className="flex items-center gap-2 font-black text-slate-400 uppercase tracking-widest text-[10px]">
+              <LayoutGrid className="w-4 h-4 text-emerald-600" /> Session Configuration
+            </h2>
 
-        {cameraSource === 'rtsp' && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">Camera RTSP URL</label>
-            <input
-              type="text"
-              placeholder="rtsp://admin:kishusinha123@223.231.237.123:554/cam/realmonitor?channel=1&subtype=0"
-              className="w-full border rounded p-3 text-sm font-mono bg-gray-50"
-              value={rtspUrl}
-              onChange={(e) => setRtspUrl(e.target.value)}
-            />
-            <div className="text-xs text-gray-500 space-y-1 bg-blue-50 p-2 rounded border border-blue-200">
-              <p className="flex gap-1 items-center font-medium text-blue-900">
-                <Info className="w-3 h-3" />
-                <span>Enter your complete camera IP address</span>
-              </p>
-              <p className="pl-4">Example: <code className="bg-white px-1 py-0.5 rounded text-blue-800">rtsp://admin:kishusinha123@223.231.237.123:554/cam/realmonitor?channel=1&subtype=0</code></p>
-              <p className="pl-4 text-orange-700 font-medium">
-                ⚠️ Replace <code className="bg-white px-1 rounded">223.231.237.123</code> with your actual camera IP
-              </p>
-              <p className="pl-4 text-gray-600">
-                • Ensure Port 554 is forwarded on your router for public IPs
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <select
-            className="w-full border rounded p-3"
-            value={currentPeriod}
-            onChange={(e) => setCurrentPeriod(e.target.value)}
-          >
-            <option value="">Select Period</option>
-            {periods.map((p) => (
-              <option key={p}>{p}</option>
-            ))}
-          </select>
-
-          <input
-            type="date"
-            className="w-full border rounded p-3"
-            value={attendanceDate}
-            onChange={(e) => setAttendanceDate(e.target.value)}
-          />
-        </div>
-
-
-        <div className="flex gap-2">
-          {!isStreamActive ? (
-            <button onClick={startCamera} className="btn-primary w-full">
-              <Camera className="w-4 h-4 mr-2" />
-              {cameraSource === 'rtsp' ? 'Connect to Camera' : 'Start Camera'}
-            </button>
-          ) : (
-            <>
-              {cameraSource === 'device' && (
-                <button onClick={toggleCamera} className="btn-secondary w-full">
-                  Switch Camera
-                </button>
-              )}
-              <button onClick={stopCamera} className="btn-secondary w-full">
-                Stop
-              </button>
-            </>
-          )}
-        </div>
-      </section>
-
-      {/* CAMERA */}
-      <main className="px-4 py-4 space-y-4">
-        <div className="relative bg-black rounded overflow-hidden aspect-[4/3]">
-
-          {cameraSource === 'device' ? (
-            <>
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-              <canvas ref={canvasRef} className="hidden" />
-            </>
-          ) : (
-            // RTSP View
-            rtspPreviewImage ? (
-              <img src={rtspPreviewImage} className="w-full h-full object-contain bg-black" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400 flex-col gap-2">
-                <Camera className="w-12 h-12 opacity-20" />
-                <p className="text-sm">Enter stream URL and connect</p>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 ml-1">Class Segment</label>
+                <select
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs font-black uppercase tracking-widest focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all appearance-none cursor-pointer"
+                  value={currentPeriod}
+                  onChange={(e) => setCurrentPeriod(e.target.value)}
+                >
+                  <option value="">Choose Phase...</option>
+                  {periods.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
               </div>
-            )
-          )}
 
-
-          {!isStreamActive && cameraSource === 'device' && (
-            <div className="absolute inset-0 flex items-center justify-center text-white">
-              Camera not active
-            </div>
-          )}
-
-          {isScanning && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white z-10">
-              <div className="flex flex-col items-center gap-2">
-                <RefreshCw className="w-8 h-8 animate-spin" />
-                <span>{cameraSource === 'rtsp' && !isStreamActive ? 'Connecting...' : 'Scanning...'}</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {isStreamActive && (
-          <button
-            onClick={startScanning}
-            disabled={isScanning}
-            className="btn-primary w-full"
-          >
-            <Scan className="w-4 h-4 mr-2" />
-            Start Scanning
-          </button>
-        )}
-
-        {/* RESULTS */}
-        <section className="bg-white border rounded p-4">
-          <h2 className="font-medium mb-3">
-            Detected Students ({detectedFaces.length})
-          </h2>
-
-          {detectedFaces.length === 0 && (
-            <p className="text-sm text-gray-500">No students detected yet</p>
-          )}
-
-          <div className="space-y-2">
-            {detectedFaces.map((face, i) => (
-              <div
-                key={i}
-                className={`p-3 rounded border flex justify-between ${face.spoofed
-                  ? "border-red-400 bg-red-50"
-                  : face.attendanceAlreadyMarked
-                    ? "border-yellow-400 bg-yellow-50"
-                    : "border-green-400 bg-green-50"
-                  }`}
-              >
-                <div>
-                  <p className="font-medium">{face.name}</p>
-                  <p className="text-xs text-gray-600">
-                    Roll: {face.rollNumber}
-                  </p>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 ml-1">Protocol Date</label>
+                <div className="relative">
+                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="date"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 pl-12 text-xs font-black uppercase outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all cursor-pointer"
+                    value={attendanceDate}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                  />
                 </div>
-                {face.spoofed ? (
-                  <AlertCircle className="text-red-600" />
-                ) : (
-                  <CheckCircle className="text-green-600" />
-                )}
               </div>
-            ))}
-          </div>
-        </section>
-      </main>
+            </div>
+          </section>
 
-      {/* ALERT */}
-      <AlertDialog open={showAlreadyMarkedDialog} onOpenChange={setShowAlreadyMarkedDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex gap-2">
-              <Info /> Attendance Already Marked
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              <ul className="mt-2 space-y-1">
-                {alreadyMarkedStudents.map((s, i) => (
-                  <li key={i}>• {s}</li>
-                ))}
-              </ul>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction>OK</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          <section className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden relative">
+            <div className="flex items-center justify-between mb-8 px-1">
+              <h2 className="font-black text-slate-400 uppercase tracking-widest text-[10px] flex items-center gap-2">
+                <History className="w-4 h-4 text-emerald-600" /> Session History
+              </h2>
+              <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">{detectedFaces.length} Detected</span>
+            </div>
+
+            <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
+              {detectedFaces.length === 0 ? (
+                <div className="text-center py-16 grayscale opacity-30">
+                  <UserCheck className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">No telemetry data</p>
+                </div>
+              ) : (
+                detectedFaces.map((face, i) => (
+                  <motion.div
+                    initial={{ x: -10, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    key={i}
+                    className="flex items-center justify-between p-4 rounded-3xl bg-slate-50 border border-slate-100 hover:bg-white hover:shadow-md transition-all group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${face.spoofed || face.name === 'Unknown' ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                        {face.name === 'Unknown' ? <XCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-900">{face.name}</p>
+                        <p className={`text-[8px] font-black uppercase tracking-wider mt-0.5 ${face.recognitionConfidence && face.recognitionConfidence < 70 ? 'text-amber-500' : 'text-slate-400'}`}>
+                          Match: {face.recognitionConfidence?.toFixed(1) || 0}% | Trust: {face.currentTrustScore || 100}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* Right: Scanner */}
+        <div className="lg:col-span-8 order-1 lg:order-2">
+          <AnimatePresence mode="wait">
+            {!isScanning ? (
+              <motion.div
+                key="start"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="flex flex-col items-center justify-center gap-8 h-[650px] bg-white rounded-[4rem] border border-slate-100 shadow-xl relative overflow-hidden group"
+              >
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
+                <div className="w-28 h-28 bg-emerald-50 rounded-[3rem] flex items-center justify-center border-4 border-white shadow-xl shadow-emerald-500/10 group-hover:scale-110 transition-transform duration-500">
+                  <Shield className="w-12 h-12 text-emerald-600" />
+                </div>
+                <div className="text-center space-y-3">
+                  <h2 className="text-4xl font-black text-slate-900 leading-tight">Biometric Capture <br />Subsystem</h2>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Active Status: {isClassroomMode ? 'Classroom Mode' : 'Protocol Standby'}</p>
+                </div>
+
+                <div className="flex flex-col items-center gap-4 w-full px-12">
+                  <button
+                    onClick={() => setIsScanning(true)}
+                    disabled={!currentPeriod}
+                    className="w-full max-w-sm bg-emerald-600 text-white rounded-[2.5rem] py-5 px-12 text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:bg-emerald-700 transition-all disabled:opacity-30 disabled:grayscale"
+                  >
+                    {isClassroomMode ? 'Start Group Scan' : 'Open Capture Link'}
+                  </button>
+                  {!currentPeriod && (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-rose-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                    >
+                      <Zap className="w-3 h-3 fill-rose-500" /> Select Phase to Authorize
+                    </motion.p>
+                  )}
+                </div>
+
+                <div className="absolute bottom-8 left-0 w-full flex justify-center">
+                  <div className="flex items-center gap-6 text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                    <span className="flex items-center gap-1.5"><Shield className="w-3 h-3" /> End-to-End Encryption</span>
+                    <span className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-emerald-500" /> {isClassroomMode ? 'Batch Match Mode' : 'Neural Match Active'}</span>
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="scanning"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="relative h-[650px] bg-black rounded-[4rem] overflow-hidden border-8 border-white shadow-2xl"
+              >
+                <LivenessScanner
+                  mode={isClassroomMode ? 'classroom' : 'single'}
+                  onSuccess={handleLivenessSuccess}
+                  onFailure={(err) => {
+                    showToast("error", "Capture Failed", err);
+                    setIsScanning(false);
+                  }}
+                />
+                <div className="absolute bottom-10 left-0 w-full flex justify-center z-50">
+                  <button
+                    onClick={() => setIsScanning(false)}
+                    className="bg-white/10 backdrop-blur-md border border-white/20 px-8 py-3 rounded-full text-white text-[10px] font-black uppercase tracking-widest hover:bg-white/20 transition-all flex items-center gap-3"
+                  >
+                    <XCircle className="w-4 h-4 text-rose-500" /> Terminate Session
+                  </button>
+                </div>
+                <div className="absolute inset-x-12 top-12 flex justify-between items-start pointer-events-none z-50">
+                  <div className="border-l-2 border-t-2 border-emerald-500 w-12 h-12" />
+                  <div className="border-r-2 border-t-2 border-emerald-500 w-12 h-12" />
+                </div>
+                <div className="absolute inset-x-12 bottom-24 flex justify-between items-start pointer-events-none z-50">
+                  <div className="border-l-2 border-b-2 border-emerald-500 w-12 h-12" />
+                  <div className="border-r-2 border-b-2 border-emerald-500 w-12 h-12" />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </main>
     </div>
   );
 };

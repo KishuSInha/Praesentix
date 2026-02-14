@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Disable oneDNN optimizations and FORCE CPU-ONLY for Render
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -17,14 +16,12 @@ import sys
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-# from flask_sqlalchemy import SQLAlchemy # Removed
 from database import get_db, engine
-from models import FaceEncoding, Attendance, Notification, User, Base
+from models import FaceEncoding, Attendance, Notification, User, EngagementLog, Base
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, text, case
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import bcrypt
-# from pgvector.sqlalchemy import Vector # Removed
 from pydantic import ValidationError
 from schemas import LoginRequest, RecognizeRequest, MarkAttendanceRequest
 from logging_config import logger
@@ -33,7 +30,45 @@ import cv2
 import numpy as np
 from deepface import DeepFace
 
-# Create tables if they don't exist
+def ensure_db_schema():
+    """Fail-safe to ensure all columns exist in SQLite since Base.metadata.create_all doesn't add missing columns to existing tables."""
+    try:
+        from database import DB_DIR
+        db_path = os.path.join(DB_DIR, 'app.db')
+        if not os.path.exists(db_path):
+            return
+            
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Check attendance table
+        cursor.execute("PRAGMA table_info(attendance)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'is_offline_sync' not in columns:
+            print("[SCHEMA] Adding is_offline_sync to attendance table...", flush=True)
+            cursor.execute("ALTER TABLE attendance ADD COLUMN is_offline_sync BOOLEAN DEFAULT 0")
+            
+        if 'trust_score_impact' not in columns:
+            print("[SCHEMA] Adding trust_score_impact to attendance table...", flush=True)
+            cursor.execute("ALTER TABLE attendance ADD COLUMN trust_score_impact FLOAT DEFAULT 0.0")
+
+        # Check users table
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'trust_score' not in columns:
+            print("[SCHEMA] Adding trust_score to users table...", flush=True)
+            cursor.execute("ALTER TABLE users ADD COLUMN trust_score FLOAT DEFAULT 100.0")
+            
+        conn.commit()
+        conn.close()
+        print("[SCHEMA] Database schema check completed successfully.", flush=True)
+    except Exception as e:
+        print(f"[SCHEMA ERROR] Failed to ensure schema: {str(e)}", flush=True)
+
+# Ensure schema before creating tables
+ensure_db_schema()
 Base.metadata.create_all(bind=engine)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -205,19 +240,29 @@ def get_db_session():
 def calculate_motion_score(frames):
     """
     Calculate motion score between consecutive frames using absdiff.
-    Expects list of decoded OpenCV images (BGR).
+    Optimized: grayscale + blur to reduce noise.
     """
     if len(frames) < 2:
-        return 100.0 # Can't determine from 1 frame, assume live for backward/single-frame compatibility
+        return 100.0
     
     diffs = []
     for i in range(len(frames) - 1):
-        # Calculate mean absolute difference
-        diff = cv2.absdiff(frames[i], frames[i+1])
-        diff_score = np.mean(diff)
+        # Pre-process for better diff consistency
+        gray1 = cv2.cvtColor(frames[i], cv2.COLOR_BGR2GRAY)
+        gray2 = cv2.cvtColor(frames[i+1], cv2.COLOR_BGR2GRAY)
+        
+        # Blur to remove pixel noise/refresh line artifacts
+        blur1 = cv2.GaussianBlur(gray1, (5, 5), 0)
+        blur2 = cv2.GaussianBlur(gray2, (5, 5), 0)
+        
+        diff = cv2.absdiff(blur1, blur2)
+        diff_score = float(np.mean(diff))
         diffs.append(diff_score)
+        logger.info(f"[MOTION] Frame {i}->{i+1} score: {diff_score:.4f}")
     
-    return np.mean(diffs)
+    avg_score = float(np.mean(diffs))
+    logger.info(f"[MOTION] Final Score: {avg_score:.4f}")
+    return avg_score
 
 def get_face_encodings_from_image(image):
     """
@@ -225,7 +270,7 @@ def get_face_encodings_from_image(image):
     Returns a list of encodings (one per detected face).
     """
     try:
-        print(f"[DEBUG] Starting DeepFace.represent with image shape: {image.shape}", flush=True)
+        logger.info(f"[DEBUG] Starting DeepFace.represent with image shape: {image.shape}")
         
         results = DeepFace.represent(
             img_path=image,
@@ -234,74 +279,92 @@ def get_face_encodings_from_image(image):
             detector_backend='retinaface'
         )
         
-        print(f"[DEBUG] DeepFace.represent completed successfully", flush=True)
+        logger.info(f"[DEBUG] DeepFace detected {len(results)} face(s)")
         encodings = [np.array(res['embedding']) for res in results]
         return encodings
-        
     except ValueError as ve:
-        # No face detected
-        print(f"[DEBUG] No face detected: {str(ve)}", flush=True)
+        logger.warning(f"[DEBUG] No face detected: {str(ve)}")
         return []
     except Exception as e:
-        print(f"[ERROR] DeepFace encoding error: {str(e)}", flush=True)
+        logger.error(f"[ERROR] DeepFace encoding error: {str(e)}", exc_info=True)
         return []
 
-def find_matching_face_vector(encoding, db, threshold=FACE_RECOGNITION_THRESHOLD):
+def find_matching_faces_batch(encodings, db, threshold=FACE_RECOGNITION_THRESHOLD):
     """
-    Find the best matching face in the database using NumPy Cosine Distance.
-    Returns (person_id, confidence_percent)
+    Optimized batch recognition using NumPy broadcasting.
+    Args:
+        encodings: List of M encodings (each a 1D array/list).
+        db: Database session.
+    Returns:
+        List of (person_id, confidence_percent) for each encoding.
     """
     try:
-        stored_faces = db.query(FaceEncoding).all()
-        
-        if not stored_faces:
-            return None, 0
+        if not encodings:
+            logger.info("Batch match: No input encodings")
+            return []
             
-        best_match_id = None
-        best_distance = 10.0 # Initialize with high distance (0 is identical)
-        
-        target_embedding = np.array(encoding)
-        # Normalize target
-        target_norm = np.linalg.norm(target_embedding)
-        
+        stored_faces = db.query(FaceEncoding).all()
+        logger.info(f"Batch match: {len(stored_faces)} stored faces found in DB")
+        if not stored_faces:
+            return [(None, 0)] * len(encodings)
+            
+        # 1. Prepare stored embeddings matrix (N x D)
+        stored_ids = []
+        stored_matrix = []
         for face in stored_faces:
             if not face.embedding: continue
             
-            # Load stored embedding
-            if isinstance(face.embedding, str):
-                stored_embedding = np.array(json.loads(face.embedding))
-            else:
-                stored_embedding = np.array(face.embedding)
-            
-            # Cosine Distance = 1 - Cosine Similarity
-            # Similarity = (A . B) / (||A|| * ||B||)
-            stored_norm = np.linalg.norm(stored_embedding)
-            
-            if target_norm == 0 or stored_norm == 0:
-                continue
-                
-            similarity = np.dot(target_embedding, stored_embedding) / (target_norm * stored_norm)
-            distance = 1 - similarity
-            
-            if distance < best_distance:
-                best_distance = distance
-                best_match_id = face.person_id
+            emb = np.array(json.loads(face.embedding)) if isinstance(face.embedding, str) else np.array(face.embedding)
+            # Normalize for cosine similarity
+            norm = np.linalg.norm(emb)
+            if norm > 0:
+                stored_matrix.append(emb / norm)
+                stored_ids.append(face.person_id)
         
-        # Calculate confidence percentage
-        confidence_percent = (1 - best_distance) * 100
-        print(f"[DEBUG] Best match: {best_match_id} with distance: {best_distance:.4f} (Threshold: {threshold})", flush=True)
-
-        if best_distance <= threshold:
-            return best_match_id, confidence_percent
+        if not stored_matrix:
+            return [(None, 0)] * len(encodings)
             
-        return None, confidence_percent
+        stored_matrix = np.array(stored_matrix) # (N, D)
+        
+        # 2. Prepare detected embeddings matrix (M x D)
+        detected_matrix = []
+        for enc in encodings:
+            emb = np.array(enc)
+            norm = np.linalg.norm(emb)
+            detected_matrix.append(emb / norm if norm > 0 else emb)
+        
+        detected_matrix = np.array(detected_matrix) # (M, D)
+        
+        # 3. Compute Cosine Similarity Matrix (M, N) via matrix multiplication
+        # Similarity = Dot Product of normalized vectors
+        similarity_matrix = np.dot(detected_matrix, stored_matrix.T)
+        
+        results = []
+        for i in range(len(encodings)):
+            best_idx = np.argmax(similarity_matrix[i])
+            best_similarity = similarity_matrix[i][best_idx]
+            best_distance = 1 - best_similarity
+            
+            confidence = float(best_similarity * 100)
+            logger.info(f"Encoding {i}: Best match {stored_ids[best_idx]} with distance {best_distance:.4f} (Threshold: {threshold})")
+            
+            if best_distance <= threshold:
+                results.append((stored_ids[best_idx], confidence))
+            else:
+                results.append((None, confidence))
+                
+        return results
             
     except Exception as e:
-        print(f"[ERROR] Vector search error: {str(e)}", flush=True)
+        print(f"[ERROR] Batch vector search error: {str(e)}", flush=True)
         import traceback
         traceback.print_exc()
-        
-    return None, 0
+        return [(None, 0)] * len(encodings)
+
+def find_matching_face_vector(encoding, db, threshold=FACE_RECOGNITION_THRESHOLD):
+    """Legacy wrapper for single face recognition."""
+    results = find_matching_faces_batch([encoding], db, threshold)
+    return results[0]
 
 def parse_person_id(person_id):
     """
@@ -525,10 +588,11 @@ def process_face_recognition(frames, period, date, db):
     
     # Calculate motion score for liveness
     motion_score = calculate_motion_score(frames)
-    is_live_motion = bool(motion_score > 0.2) if len(frames) > 1 else True
+    # Increased threshold to 0.4 for burst mode to be more restrictive
+    is_live_motion = bool(motion_score > 0.4) if len(frames) > 1 else True
     liveness_confidence = min(99.0, 70.0 + (motion_score * 10)) if is_live_motion else 30.0
     
-    logger.info(f"Face recognition processing: {len(frames)} frames, motion: {motion_score:.4f}, live: {is_live_motion}")
+    logger.info(f"Recognition: {len(frames)} frames, motion_score: {motion_score:.4f}, is_live: {is_live_motion}")
 
     try:
         # Get face encodings from the primary image using DeepFace
@@ -547,11 +611,12 @@ def process_face_recognition(frames, period, date, db):
                 'detectedFaces': []
             }
         
-        detected_faces = []
+        # 1. Batch recognize all faces at once (Optimized O(N+M))
+        match_results = find_matching_faces_batch(face_encodings, db)
         
-        for encoding in face_encodings:
-            # Find matching face in database using pgvector
-            person_id, confidence = find_matching_face_vector(encoding, db)
+        detected_faces = []
+        for i, encoding in enumerate(face_encodings):
+            person_id, confidence = match_results[i]
             
             if person_id:
                 name, roll_number = parse_person_id(person_id)
@@ -565,8 +630,21 @@ def process_face_recognition(frames, period, date, db):
                     'isLive': is_live_motion
                 }
                 
+                # Calculate Trust Score Impact
+                trust_impact = 0.0
+                if is_live_motion:
+                    if confidence > 90: trust_impact = 1.0
+                    elif confidence < 75: trust_impact = -1.0
+                else:
+                    trust_impact = -5.0 # Heavy penalty for spoofing
+
                 # Only mark attendance if LIVE
                 if is_live_motion:
+                    # Update User Trust Score
+                    user = db.query(User).filter(User.student_id == roll_number).first()
+                    if user:
+                        user.trust_score = max(0.0, min(100.0, user.trust_score + trust_impact))
+                    
                     success, message = period_db.mark_period_attendance(
                         student_id=roll_number,
                         name=name,
@@ -576,15 +654,29 @@ def process_face_recognition(frames, period, date, db):
                         liveness_confidence=detected_face['livenessConfidence'],
                         recognition_confidence=detected_face['recognitionConfidence'],
                         is_live=True,
+                        trust_score_impact=trust_impact,
                         db=db
                     )
                     detected_face['attendanceMarked'] = success
                     detected_face['attendanceAlreadyMarked'] = not success and 'already marked' in message.lower()
-                    if success:
-                        invalidate_cache() # Clear stats cache on new attendance
+                    
+                    t_score = user.trust_score if user else 100.0
+                    if t_score is None: t_score = 100.0
+                    detected_face['currentTrustScore'] = float(round(t_score, 1))
+                    logger.info(f"User {roll_number} trust score: {detected_face['currentTrustScore']} (User found: {user is not None})")
                 else:
+                    # Even if spoofed, we penalize the suspected user if found
+                    user = db.query(User).filter(User.student_id == roll_number).first()
+                    if user:
+                        user.trust_score = max(0.0, min(100.0, user.trust_score + trust_impact))
+                    
                     detected_face['attendanceMarked'] = False
                     detected_face['attendanceAlreadyMarked'] = False
+                    
+                    t_score = user.trust_score if user else 100.0
+                    if t_score is None: t_score = 100.0
+                    detected_face['currentTrustScore'] = float(round(t_score, 1))
+                    logger.info(f"User {roll_number} SPOOFED trust score: {detected_face['currentTrustScore']}")
             else:
                 # Unknown face
                 detected_face = {
@@ -601,6 +693,13 @@ def process_face_recognition(frames, period, date, db):
             
             detected_faces.append(detected_face)
         
+        # Commit all trust score updates and attendance records (if not already committed by period_db)
+        try:
+            db.commit()
+            invalidate_cache() 
+        except:
+            db.rollback()
+            
         recognized_count = sum(1 for f in detected_faces if f['name'] != 'Unknown')
         logger.info(f"Recognition success: {len(detected_faces)} detected, {recognized_count} recognized")
         
@@ -882,7 +981,8 @@ def get_period_attendance_api():
                 'spoofingStatus': record[7],
                 'livenessConfidence': record[8],
                 'recognitionConfidence': record[9],
-                'timestamp': record[10]
+                'timestamp': record[10],
+                'trustScoreImpact': record[11] if len(record) > 11 else 0.0
             })
         
         return jsonify({
@@ -940,13 +1040,18 @@ def get_teacher_stats():
         if total_students > 0:
             avg_attendance = round((today_present / total_students) * 100, 1)
             
+        # 4. Average Trust Score (Verification Score)
+        avg_trust_sql = text("SELECT AVG(trust_score) FROM users WHERE role = 'student' AND trust_score IS NOT NULL")
+        avg_trust = db.execute(avg_trust_sql).scalar() or 100.0
+            
         return jsonify({
             'success': True,
             'data': {
-                'totalClasses': 6, # Mocked classes count for dashboard
+                'totalClasses': 6,
                 'studentsTotal': total_students,
                 'averageAttendance': avg_attendance,
-                'todayPresent': today_present
+                'todayPresent': today_present,
+                'verificationScore': round(float(avg_trust), 1)
             }
         })
     except Exception as e:
@@ -1054,13 +1159,18 @@ def get_admin_stats():
             
         active_users = db.query(User).count() # Simply total users for now
         
+        # 4. Average Trust Score (Verification Score)
+        avg_trust_sql = text("SELECT AVG(trust_score) FROM users WHERE role = 'student' AND trust_score IS NOT NULL")
+        avg_trust = db.execute(avg_trust_sql).scalar() or 100.0
+        
         return jsonify({
             'success': True,
             'data': {
                 'totalStudents': total_students,
                 'totalTeachers': total_teachers,
                 'averageAttendance': avg_attendance,
-                'activeUsers': active_users
+                'activeUsers': active_users,
+                'verificationScore': round(float(avg_trust), 1)
             }
         })
     except Exception as e:
@@ -1199,7 +1309,117 @@ def get_education_stats():
     finally:
         db.close()
 
+@app.route('/api/sync/attendance', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def sync_attendance():
+    """Sync batch attendance from offline storage."""
+    try:
+        data = request.get_json()
+        records = data.get('records', [])
+        
+        if not records:
+            return jsonify({'success': True, 'syncedCount': 0})
+            
+        db = get_db_session()
+        synced_count = 0
+        try:
+            for rec in records:
+                success, _ = period_db.mark_period_attendance(
+                    student_id=rec.get('studentId'),
+                    name=rec.get('name'),
+                    date_str=rec.get('date'),
+                    period=rec.get('period'),
+                    emotion=rec.get('emotion', 'Neutral'),
+                    liveness_confidence=rec.get('livenessConfidence', 75.0),
+                    recognition_confidence=rec.get('recognitionConfidence', 85.0),
+                    is_live=True,
+                    is_offline_sync=True,
+                    db=db
+                )
+                if success:
+                    synced_count += 1
+            
+            db.commit()
+            if synced_count > 0:
+                invalidate_cache()
+            return jsonify({'success': True, 'syncedCount': synced_count})
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Sync error: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/engagement/heartbeat', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def engagement_heartbeat():
+    """Receive periodic engagement updates from the frontend."""
+    try:
+        data = request.get_json()
+        student_id = data.get('studentId')
+        session_id = data.get('sessionId')
+        is_focused = data.get('isFocused', True)
+        drowsiness = data.get('drowsinessDetected', False)
+        
+        if not student_id:
+            return jsonify({'success': False, 'message': 'Student ID required'}), 400
+            
+        db = get_db_session()
+        try:
+            log = EngagementLog(
+                student_id=student_id,
+                session_id=session_id,
+                is_focused=is_focused,
+                drowsiness_detected=drowsiness,
+                timestamp=datetime.utcnow()
+            )
+            db.add(log)
+            db.commit()
+            return jsonify({'success': True})
+        finally:
+            db.close()
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/student/<student_id>/engagement', methods=['GET', 'OPTIONS'])
+@jwt_required()
+def get_engagement_score(student_id):
+    """Calculate and return engagement score for a student."""
+    db = get_db_session()
+    try:
+        # Get logs from last 24 hours
+        yesterday = datetime.utcnow() - timedelta(days=1)
+        logs = db.query(EngagementLog).filter(
+            EngagementLog.student_id == student_id,
+            EngagementLog.timestamp >= yesterday
+        ).all()
+        
+        if not logs:
+            return jsonify({'success': True, 'score': 100, 'status': 'No data'})
+            
+        total = len(logs)
+        focused = sum(1 for l in logs if l.is_focused)
+        drowsy = sum(1 for l in logs if l.drowsiness_detected)
+        
+        # Simple formula: focused % - (drowsy penalty)
+        score = (focused / total) * 100
+        if drowsy > 0:
+            score = max(0, score - (drowsy * 5))
+            
+        status = "Excellent"
+        if score < 60: status = "Risk of academic decline"
+        elif score < 80: status = "Needs attention"
+        
+        return jsonify({
+            'success': True,
+            'score': round(score, 1),
+            'status': status,
+            'logCount': total
+        })
+    finally:
+        db.close()
+
 if __name__ == '__main__':
-    # Use PORT environment variable if available (required for Render)
     port = int(os.environ.get('PORT', 5002))
     app.run(debug=False, port=port, host='0.0.0.0')
