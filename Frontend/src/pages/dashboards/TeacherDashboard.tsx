@@ -63,7 +63,7 @@ const TeacherDashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950 font-['Outfit'] antialiased">
+    <div className="h-screen w-screen bg-slate-50 text-slate-950 font-['Outfit'] antialiased flex flex-col overflow-hidden">
       <header className="px-8 py-4 bg-white border-b border-slate-100 sticky top-0 z-50 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Logo size="sm" />
@@ -94,7 +94,7 @@ const TeacherDashboard = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 md:p-10 space-y-10">
+      <main className="flex-1 overflow-y-auto p-6 md:p-10 lg:p-12 space-y-10">
         {/* Welcome Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
