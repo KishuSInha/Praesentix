@@ -7,11 +7,18 @@ import { CheckCircle2, AlertCircle, RefreshCcw, ShieldCheck, Camera, UserCheck }
 interface LivenessScannerProps {
     onSuccess: (images: string[]) => void;
     onFailure: (reason: string) => void;
+    deviceId?: string;
     studentId?: string;
     mode?: 'single' | 'classroom';
 }
 
-export const LivenessScanner: React.FC<LivenessScannerProps> = ({ onSuccess, onFailure, studentId, mode = 'single' }) => {
+export const LivenessScanner: React.FC<LivenessScannerProps> = ({
+    onSuccess,
+    onFailure,
+    deviceId,
+    studentId,
+    mode = 'single'
+}) => {
     const webcamRef = useRef<Webcam>(null);
     const [step, setStep] = useState<'initializing' | 'idle' | 'blink' | 'turn' | 'verifying' | 'success' | 'countdown' | 'capturing'>('initializing');
     const [progress, setProgress] = useState(0);
@@ -19,16 +26,27 @@ export const LivenessScanner: React.FC<LivenessScannerProps> = ({ onSuccess, onF
     const [trustScore, setTrustScore] = useState(100);
 
     useEffect(() => {
+        let isMounted = true;
         const init = async () => {
+            console.log("Liveness: Initializing models with deviceId:", deviceId || "default");
             try {
+                // Ensure livenessDetector is initialized (loads assets from CDN)
                 await livenessDetector.initialize();
-                setStep('idle');
-            } catch (err) {
-                onFailure("Failed to initialize camera");
+
+                if (isMounted) {
+                    console.log("Liveness: Models loaded successfully");
+                    setStep('idle');
+                }
+            } catch (err: any) {
+                console.error("Liveness: Initialization error:", err);
+                if (isMounted) {
+                    onFailure(err.message || "Failed to load biometric models. Check network connectivity.");
+                }
             }
         };
         init();
-    }, [onFailure]);
+        return () => { isMounted = false; };
+    }, [onFailure, deviceId]);
 
     const captureFrame = useCallback(() => {
         if (webcamRef.current) {
@@ -42,6 +60,24 @@ export const LivenessScanner: React.FC<LivenessScannerProps> = ({ onSuccess, onF
         return null;
     }, []);
 
+    // Wait until the webcam video element has valid dimensions (stream is live)
+    const waitForVideo = (timeoutMs = 3000): Promise<boolean> => {
+        return new Promise((resolve) => {
+            const start = Date.now();
+            const poll = () => {
+                const video = webcamRef.current?.video;
+                if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+                    resolve(true);
+                } else if (Date.now() - start > timeoutMs) {
+                    resolve(false);
+                } else {
+                    setTimeout(poll, 100);
+                }
+            };
+            poll();
+        });
+    };
+
     const startClassroomCapture = () => {
         setStep('countdown');
         setProgress(0);
@@ -53,19 +89,25 @@ export const LivenessScanner: React.FC<LivenessScannerProps> = ({ onSuccess, onF
                 clearInterval(interval);
                 setStep('capturing');
 
-                // Capture burst of 3 frames for liveness detection
+                // Capture burst of 3 frames with retry on each frame
                 const frames: string[] = [];
                 for (let i = 0; i < 3; i++) {
-                    const img = captureFrame();
+                    let img: string | null = null;
+                    // Retry up to 10 times per frame (1s total)
+                    for (let attempt = 0; attempt < 10; attempt++) {
+                        img = captureFrame();
+                        if (img) break;
+                        await new Promise(r => setTimeout(r, 100));
+                    }
                     if (img) frames.push(img);
-                    if (i < 2) await new Promise(r => setTimeout(r, 150)); // 150ms delay between burst frames
+                    if (i < 2) await new Promise(r => setTimeout(r, 150));
                 }
 
                 if (frames.length > 0) {
                     onSuccess(frames);
                     setStep('success');
                 } else {
-                    onFailure("Capture failed");
+                    onFailure("Capture failed — no frames captured");
                 }
             }
         }, 100);
@@ -83,6 +125,9 @@ export const LivenessScanner: React.FC<LivenessScannerProps> = ({ onSuccess, onF
                 video.videoHeight > 0;
 
             if (step === 'initializing' || step === 'success' || step === 'countdown' || step === 'capturing' || !isVideoReady) {
+                if (!isVideoReady && step !== 'initializing' && step !== 'success' && step !== 'countdown' && step !== 'capturing') {
+                    // console.log("Liveness: Waiting for video stream readiness...");
+                }
                 if (step !== 'success' && step !== 'capturing') {
                     animationFrameId = requestAnimationFrame(checkLiveness);
                 }
@@ -91,6 +136,7 @@ export const LivenessScanner: React.FC<LivenessScannerProps> = ({ onSuccess, onF
 
             if (mode === 'classroom') {
                 if (step === 'idle') {
+                    console.log("Liveness: Transitioning to classroom capture");
                     startClassroomCapture();
                 }
                 return;
@@ -135,7 +181,7 @@ export const LivenessScanner: React.FC<LivenessScannerProps> = ({ onSuccess, onF
 
         checkLiveness();
         return () => cancelAnimationFrame(animationFrameId);
-    }, [step, progress, captureFrame]);
+    }, [step, progress, captureFrame, mode, startClassroomCapture]);
 
     useEffect(() => {
         if (step === 'verifying') {
@@ -145,13 +191,23 @@ export const LivenessScanner: React.FC<LivenessScannerProps> = ({ onSuccess, onF
     }, [step, capturedImages, onSuccess]);
 
     return (
-        <div className="relative w-full max-w-md mx-auto aspect-[3/4] rounded-[2.5rem] overflow-hidden bg-white border border-slate-100 shadow-2xl">
+        <div className="relative w-full h-full overflow-hidden bg-black">
             <Webcam
                 ref={webcamRef}
                 audio={false}
                 screenshotFormat="image/jpeg"
+                onUserMedia={() => console.log("Webcam: Stream active")}
+                onUserMediaError={(err) => {
+                    console.error("Webcam: Error", err);
+                    onFailure(typeof err === 'string' ? err : "Camera access denied or device busy");
+                }}
                 className="absolute inset-0 w-full h-full object-cover"
-                videoConstraints={{ facingMode: "user", width: 720, height: 960 }}
+                videoConstraints={{
+                    deviceId: deviceId || undefined,
+                    facingMode: deviceId ? undefined : "user",
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }}
             />
 
             {/* Scanning Frame (Simplified) */}

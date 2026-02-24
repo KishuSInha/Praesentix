@@ -16,7 +16,7 @@ try:
     logger.info(f"Connected to Redis at {REDIS_URL}")
 except Exception as e:
     if "localhost" in REDIS_URL or "127.0.0.1" in REDIS_URL:
-        logger.warning(f"Redis not available locally ({str(e)}). Caching disabled.")
+        logger.info(f"Redis not available locally ({str(e)}). Caching disabled.")
     else:
         logger.error(f"Failed to connect to Redis: {str(e)}")
     redis_client = None

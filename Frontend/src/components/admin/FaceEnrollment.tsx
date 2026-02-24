@@ -56,8 +56,8 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
           facingMode: 'user'
         }
       });
@@ -107,8 +107,8 @@ export const FaceEnrollment = ({ onClose }: { onClose: () => void }) => {
     // Draw the current video frame to canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Convert canvas to data URL and add to captured images
-    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    // Convert canvas to data URL and add to captured images with max quality
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 1.0);
     setCapturedImages(prev => [...prev, imageDataUrl]);
 
     // Show success toast

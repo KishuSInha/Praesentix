@@ -4,11 +4,11 @@ FROM python:3.10-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV TF_CPP_MIN_LOG_LEVEL=3
+
 # Fix for Render/Generic Linux libGL error
 ENV DEBIAN_FRONTEND=noninteractive
-#hello
-# Install system dependencies required for OpenCV
+
+# Install system dependencies required for OpenCV and ONNX
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     libgtk2.0-dev \
     pkg-config \
+    libopenblas-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set work directory

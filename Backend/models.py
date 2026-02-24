@@ -33,11 +33,16 @@ class FaceEncoding(Base):
     __tablename__ = "face_encodings"
 
     id = Column(Integer, primary_key=True, index=True)
-    person_id = Column(String, unique=True, index=True)
-    embedding = Column(JSON) # Storing list/array as JSON
+    person_id = Column(String, index=True)  # NOT unique — multiple descriptors per student
+    embedding = Column(JSON)  # Storing list/array as JSON
+    descriptor_index = Column(Integer, default=0)  # 0..4 per student
     num_images = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('person_id', 'descriptor_index', name='unique_person_descriptor'),
+    )
 
 class Notification(Base):
     __tablename__ = "notifications"

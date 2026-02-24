@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -16,13 +16,15 @@ import {
   Monitor,
   RefreshCw,
   Smartphone,
-  Wifi
+  Wifi,
+  Scan
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LivenessScanner } from "../components/LivenessScanner";
 import { useToast } from "../hooks/useToast";
 import api from "../utils/api";
 import Logo from "../components/Logo";
+import { API_CONFIG } from "../utils/mockData";
 
 interface DetectedFace {
   name: string;
@@ -34,6 +36,7 @@ interface DetectedFace {
   recognitionConfidence?: number;
   livenessConfidence?: number;
   currentTrustScore?: number;
+  isCapturing?: boolean;
 }
 
 const DEFAULT_RTSP_URL = "rtsp://10.12.3.8:554/stream1";
@@ -56,6 +59,14 @@ const CameraAttendance = () => {
   const [isTestingRtsp, setIsTestingRtsp] = useState(false);
   const [rtspConnected, setRtspConnected] = useState(false);
 
+  // Continuous RTSP Recognition state
+  const [isContinuousRtspScanning, setIsContinuousRtspScanning] = useState(false);
+  const continuousRtspRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Camera Device Selection
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+
   const periods = ["1st Period", "2nd Period", "3rd Period", "4th Period", "5th Period", "6th Period"];
 
   useEffect(() => {
@@ -67,6 +78,25 @@ const CameraAttendance = () => {
       window.removeEventListener('offline', handleStatus);
     };
   }, []);
+
+  // RTSP logic uses MJPEG stream from the backend instead of polling logic
+
+  useEffect(() => {
+    const getDevices = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true });
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(d => d.kind === 'videoinput');
+        setVideoDevices(videoInputs);
+        if (videoInputs.length > 0 && !selectedDeviceId) {
+          setSelectedDeviceId(videoInputs[0].deviceId);
+        }
+      } catch (err) {
+        console.error('Failed to enumerate devices:', err);
+      }
+    };
+    getDevices();
+  }, [selectedDeviceId]);
 
   const handleLivenessSuccess = async (images: string[]) => {
     if (!currentPeriod) {
@@ -99,9 +129,9 @@ const CameraAttendance = () => {
       showToast("info", "Testing Connection", "Attempting to reach camera...");
       const result = await api.getRtspPreview(rtspUrl);
       if (result.success && result.image) {
-        setRtspPreview(result.image);
+        setRtspPreview(`${API_CONFIG.BASE_URL}/rtsp/stream?url=${encodeURIComponent(rtspUrl)}`);
         setRtspConnected(true);
-        showToast("success", "Connection Established", "Camera is online and reachable");
+        showToast("success", "Connection Established", "Live stream active!");
       }
     } catch (err: any) {
       showToast("error", "Connection Failed", err.message || "Could not reach camera");
@@ -112,26 +142,130 @@ const CameraAttendance = () => {
     }
   };
 
+  const fetchRecentAttendance = useCallback(async () => {
+    if (!currentPeriod) return;
+    try {
+      const [attendanceRes, liveRes] = await Promise.all([
+        api.getPeriodAttendance(attendanceDate, currentPeriod),
+        isContinuousRtspScanning ? api.getRtspDetections() : Promise.resolve({ success: true, detectedFaces: [] })
+      ]);
+
+      // 1. Map Confirmed Records
+      const records = attendanceRes.data || [];
+      const confirmedFaces = records.map((r: any) => ({
+        name: r.name,
+        rollNumber: r.studentId,
+        spoofed: r.spoofingStatus !== 'LIVE',
+        emotion: r.emotion || 'Neutral',
+        recognitionConfidence: r.recognitionConfidence,
+        livenessConfidence: r.livenessConfidence,
+        isLive: r.spoofingStatus === 'LIVE',
+        attendanceMarked: true
+      }));
+
+      // 2. Map Live Unconfirmed Detections
+      const liveFaces = (liveRes.detectedFaces || []).map((f: any) => ({
+        ...f,
+        attendanceMarked: false,
+        isCapturing: true // UI hint
+      }));
+
+      // Merge: Live faces first, then confirmed ones (which are already newest-first)
+      const combined: any[] = [];
+
+      // 1. Add unconfirmed active detections at the very top
+      liveFaces.forEach((lf: any) => {
+        if (!confirmedFaces.some((cf: any) => cf.rollNumber === lf.rollNumber && lf.rollNumber !== 'N/A')) {
+          combined.push(lf);
+        }
+      });
+
+      // 2. Add confirmed records (backend already returns them sorted desc by time)
+      combined.push(...confirmedFaces);
+
+      // Take the top 10 most recent (without reversing)
+      setDetectedFaces(combined.slice(0, 10));
+    } catch (err) {
+      console.error("[RTSP Polling] Failed to fetch latest attendance:", err);
+    }
+  }, [currentPeriod, attendanceDate, isContinuousRtspScanning]);
+
+  // Removed auto-fetch useEffect - user requested history only on manual scan
+
   const handleRtspRecognition = async () => {
     if (!currentPeriod) { showToast("warning", "Missing Info", "Please select a period first"); return; }
     if (!rtspUrl) { showToast("warning", "Missing URL", "Please enter an RTSP URL"); return; }
     try {
-      setIsScanning(true);
       showToast("info", "Processing", "Requesting frames from remote camera...");
       const result = await api.recognizeRtsp(rtspUrl, { period: currentPeriod, date: attendanceDate });
       if (result.success) {
-        setDetectedFaces(result.detectedFaces);
+        setDetectedFaces(result.detectedFaces.slice(0, 8).map((f: any) => ({
+          ...f,
+          spoofed: !f.isLive,
+          isLive: f.isLive,
+          attendanceMarked: true // Assume marked if returned from backend recognize
+        })));
+
         const recognized = result.detectedFaces.filter((f: any) => f.name !== 'Unknown').length;
-        showToast("success", "Recognition Complete", `Identified ${recognized} student(s)`);
-      } else {
+        if (recognized > 0 && !isContinuousRtspScanning) {
+          showToast("success", "Recognition Complete", `Identified ${recognized} student(s)`);
+        }
+      } else if (!isContinuousRtspScanning) {
         showToast("info", "No Match", "No recognized faces in remote stream");
       }
     } catch (err: any) {
-      showToast("error", "RTSP Error", err.message || "Failed to process remote recognition");
-    } finally {
-      setIsScanning(false);
+      if (!isContinuousRtspScanning) {
+        showToast("error", "RTSP Error", err.message || "Failed to process remote recognition");
+      }
+      console.error("[RTSP Recognition] Error:", err);
+      // Optional: stop continuous scanning on fatal error to prevent spam
+      // stopContinuousRtsp(); 
     }
   };
+
+  const startContinuousRtsp = async () => {
+    if (!currentPeriod || !rtspUrl) return;
+    try {
+      setIsContinuousRtspScanning(true);
+      showToast("info", "Continuous Monitoring Started", "Backend is now recognizing faces every second...");
+
+      await api.startRtspRecognition(rtspUrl, currentPeriod);
+
+      // Pull results immediately
+      fetchRecentAttendance();
+
+      // Then poll for UI updates every 3 seconds (reduces network load compared to 1s recognition)
+      continuousRtspRef.current = setInterval(() => {
+        fetchRecentAttendance();
+      }, 3000);
+    } catch (err: any) {
+      showToast("error", "Failed to start monitoring", err.message);
+      setIsContinuousRtspScanning(false);
+    }
+  };
+
+  const stopContinuousRtsp = async () => {
+    try {
+      setIsContinuousRtspScanning(false);
+      if (continuousRtspRef.current) {
+        clearInterval(continuousRtspRef.current);
+        continuousRtspRef.current = null;
+      }
+      await api.stopRtspRecognition();
+      showToast("info", "Monitoring Stopped", "Remote recognition worker deactivated.");
+    } catch (err: any) {
+      showToast("error", "Error stopping monitoring", err.message);
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (continuousRtspRef.current) {
+        clearInterval(continuousRtspRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="h-screen w-screen bg-[#f0f4f8] text-slate-900 font-['Outfit'] antialiased flex flex-col overflow-hidden">
@@ -224,6 +358,27 @@ const CameraAttendance = () => {
                 </div>
               </div>
 
+              {/* Camera Device Selector (shown when Device mode) */}
+              {cameraSource === 'device' && videoDevices.length > 1 && (
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-300 ml-0.5 mb-1 block">Camera</label>
+                  <div className="relative">
+                    <Video className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <select
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 pl-9 text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all appearance-none cursor-pointer"
+                      value={selectedDeviceId}
+                      onChange={(e) => setSelectedDeviceId(e.target.value)}
+                    >
+                      {videoDevices.map(device => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
               {/* RTSP Config (shown when RTSP mode) */}
               <AnimatePresence>
                 {cameraSource === 'rtsp' && (
@@ -273,36 +428,111 @@ const CameraAttendance = () => {
               <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{detectedFaces.length}</span>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               {detectedFaces.length === 0 ? (
                 <div className="text-center py-10 opacity-30">
                   <UserCheck className="w-8 h-8 mx-auto mb-2 text-slate-400" />
                   <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">No data yet</p>
                 </div>
               ) : (
-                detectedFaces.map((face, i) => (
-                  <motion.div
-                    initial={{ x: -10, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    key={i}
-                    className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-white hover:shadow-sm transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${face.spoofed || face.name === 'Unknown' ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>
-                        {face.name === 'Unknown' ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                detectedFaces.map((face, i) => {
+                  const isKnown = face.name !== 'Unknown';
+                  const isSpoofed = face.spoofed;
+                  const isCapturing = face.isCapturing;
+                  const conf = face.recognitionConfidence ?? 0;
+                  const statusColor = isSpoofed ? 'rose' : isCapturing ? 'slate' : isKnown ? 'emerald' : 'amber';
+                  const statusLabel = isSpoofed ? 'SPOOFED' : isCapturing ? 'CAPTURING...' : isKnown ? 'LIVE ✓' : 'UNKNOWN';
+                  const initials = isKnown
+                    ? face.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+                    : '?';
+                  const confColor = conf >= 85 ? 'bg-emerald-500' : conf >= 70 ? 'bg-amber-400' : 'bg-rose-400';
+
+                  return (
+                    <motion.div
+                      initial={{ y: 8, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: i * 0.05 }}
+                      key={i}
+                      className={`rounded-2xl border overflow-hidden transition-all hover:shadow-md ${isSpoofed ? 'bg-rose-50 border-rose-200' :
+                        isKnown ? 'bg-white border-emerald-100' :
+                          'bg-amber-50 border-amber-200'
+                        }`}
+                    >
+                      {/* Top row: avatar + name + status */}
+                      <div className="flex items-center gap-3 px-3 pt-3 pb-2">
+                        {/* Avatar circle with initials */}
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0 ${isSpoofed ? 'bg-rose-200 text-rose-700' :
+                          isKnown ? 'bg-emerald-100 text-emerald-700' :
+                            'bg-amber-200 text-amber-700'
+                          }`}>
+                          {initials}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          {/* STUDENT NAME — large, bold, prominent */}
+                          <p className={`font-black text-[15px] leading-tight truncate ${isSpoofed ? 'text-rose-800' : isKnown ? 'text-slate-900' : 'text-amber-800'
+                            }`}>
+                            {face.name}
+                          </p>
+
+                          {/* Roll number badge */}
+                          {isKnown && face.rollNumber !== 'N/A' && (
+                            <span className="inline-block mt-0.5 text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                              #{face.rollNumber}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Status pill */}
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full flex-shrink-0 ${isSpoofed ? 'bg-rose-500 text-white' :
+                          isKnown ? 'bg-emerald-500 text-white' :
+                            'bg-amber-400 text-white'
+                          }`}>
+                          {statusLabel}
+                        </span>
                       </div>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-900 leading-none">{face.name}</p>
-                        <p className="text-[8px] font-black uppercase tracking-wider text-slate-400 mt-0.5">
-                          {face.recognitionConfidence?.toFixed(0) || 0}% | T:{face.currentTrustScore || 100}
-                        </p>
+
+                      {/* Bottom row: confidence bar + trust score */}
+                      <div className="px-3 pb-3 space-y-1.5">
+                        {/* Confidence bar */}
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-700 ${confColor}`}
+                              style={{ width: `${Math.min(conf, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[9px] font-black text-slate-500 tabular-nums w-8 text-right">
+                            {conf.toFixed(0)}%
+                          </span>
+                        </div>
+
+                        {/* Trust score + attendance dot */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                            Trust&nbsp;
+                            <span className="text-slate-600">{face.currentTrustScore?.toFixed(0) ?? 100}</span>
+                          </span>
+                          {face.attendanceMarked && (
+                            <span className="text-[8px] font-black text-emerald-600 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block" />
+                              Marked
+                            </span>
+                          )}
+                          {face.attendanceAlreadyMarked && (
+                            <span className="text-[8px] font-black text-slate-400 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 bg-slate-300 rounded-full inline-block" />
+                              Already marked
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    {face.attendanceMarked && <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />}
-                  </motion.div>
-                ))
+                    </motion.div>
+                  );
+                })
               )}
             </div>
+
           </div>
         </div>
 
@@ -325,12 +555,12 @@ const CameraAttendance = () => {
 
                 {/* RTSP Preview or Idle State */}
                 {cameraSource === 'rtsp' && rtspPreview ? (
-                  <div className="relative w-full max-w-3xl mx-auto px-8">
-                    <div className="relative rounded-[2rem] overflow-hidden border-2 border-white/10 shadow-2xl aspect-video">
+                  <div className="relative w-full flex-1 min-h-0 p-4 pb-0 flex flex-col pt-12 z-20">
+                    <div className="relative rounded-[2rem] border-2 border-white/10 shadow-2xl flex-1 w-full min-h-0 bg-black/50 backdrop-blur-sm overflow-hidden">
                       <img
-                        src={`data:image/jpeg;base64,${rtspPreview}`}
+                        src={rtspPreview.startsWith('http') ? rtspPreview : `data:image/jpeg;base64,${rtspPreview}`}
                         alt="Camera Preview"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                       <div className="absolute top-4 left-4 bg-emerald-500 text-white text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest flex items-center gap-1.5">
@@ -360,24 +590,37 @@ const CameraAttendance = () => {
                 )}
 
                 {/* Action Buttons */}
-                <div className="relative z-10 flex flex-col items-center gap-3 w-full px-8 max-w-md mx-auto">
+                <div className="relative z-10 flex flex-col items-center gap-3 w-full px-8 max-w-md mx-auto flex-shrink-0 pb-8 mt-auto">
                   {cameraSource === 'device' ? (
                     <button
                       onClick={() => setIsScanning(true)}
                       disabled={!currentPeriod}
                       className="w-full bg-emerald-500 text-white rounded-2xl py-4 px-10 text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 transition-all disabled:opacity-30 disabled:grayscale"
                     >
-                      {isClassroomMode ? '⬡ Start Group Scan' : '⬡ Open Capture Link'}
+                      {isClassroomMode ? '⬡ Start Group Scan' : '⬡ Start Camera Recognition'}
                     </button>
                   ) : (
-                    <button
-                      onClick={handleRtspRecognition}
-                      disabled={!currentPeriod || !rtspUrl || isScanning}
-                      className="w-full bg-emerald-500 text-white rounded-2xl py-4 px-10 text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 transition-all disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-3"
-                    >
-                      {isScanning ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Monitor className="w-4 h-4" />}
-                      {isScanning ? "Analyzing Stream..." : "Initiate RTSP Recognition"}
-                    </button>
+                    <div className="w-full flex gap-3">
+                      <button
+                        onClick={handleRtspRecognition}
+                        disabled={!currentPeriod || !rtspUrl || isContinuousRtspScanning}
+                        className="flex-1 bg-[#1a2b3c] border border-slate-700 text-white rounded-2xl py-4 px-4 text-[11px] font-black uppercase tracking-[0.15em] shadow-xl hover:bg-slate-800 transition-all disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-2"
+                      >
+                        <Scan className="w-4 h-4" />
+                        Manual Scan
+                      </button>
+                      <button
+                        onClick={isContinuousRtspScanning ? stopContinuousRtsp : startContinuousRtsp}
+                        disabled={!currentPeriod || !rtspUrl}
+                        className={`flex-[2] text-white flex-shrink-0 rounded-2xl py-4 px-4 text-[11px] font-black uppercase tracking-[0.1em] shadow-xl transition-all disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-2 ${isContinuousRtspScanning
+                          ? 'bg-rose-500 hover:bg-rose-400 shadow-rose-500/20'
+                          : 'bg-emerald-500 hover:bg-emerald-400 shadow-emerald-500/20'
+                          }`}
+                      >
+                        {isContinuousRtspScanning ? <XCircle className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+                        {isContinuousRtspScanning ? "Stop Scanning" : "Start Continuous"}
+                      </button>
+                    </div>
                   )}
 
                   {!currentPeriod && (
@@ -422,6 +665,7 @@ const CameraAttendance = () => {
                 className="flex-1 relative bg-black h-full"
               >
                 <LivenessScanner
+                  deviceId={selectedDeviceId}
                   mode={isClassroomMode ? 'classroom' : 'single'}
                   onSuccess={handleLivenessSuccess}
                   onFailure={(err) => {

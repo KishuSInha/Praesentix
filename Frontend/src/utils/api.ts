@@ -73,6 +73,48 @@ const apiService = {
     return await response.json();
   },
 
+  startRtspRecognition: async (rtspUrl: string, period: string) => {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/rtsp/start`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ rtspUrl, period })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to start RTSP monitoring');
+    }
+
+    return await response.json();
+  },
+
+  stopRtspRecognition: async () => {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/rtsp/stop`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to stop RTSP monitoring');
+    }
+
+    return await response.json();
+  },
+
+  getRtspDetections: async () => {
+    const response = await fetch(`${API_CONFIG.BASE_URL}/rtsp/detections`, {
+      headers: getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to fetch RTSP detections');
+    }
+
+    return await response.json();
+  },
+
   // Period-based attendance
   getPeriodAttendance: async (date?: string, period?: string) => {
     const queryParams = new URLSearchParams();
